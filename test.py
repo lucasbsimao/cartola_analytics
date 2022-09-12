@@ -102,6 +102,7 @@ def fill_data_frame_with_round_games_info(round_games, round_players_info, df_ga
         "PS":[] # PS: "Penalti sofrido"
     }
 
+    aggr_df_games_info = df_games_info.copy()
     for match in round_games["partidas"]:
         team_home = match["clube_casa_id"]
         team_away = match["clube_visitante_id"]
@@ -125,7 +126,9 @@ def fill_data_frame_with_round_games_info(round_games, round_players_info, df_ga
                 for sc in player["scout"]:
                     scouts.loc[["away"],[sc]] += player["scout"][sc]
 
-        _transform_api_data_to_data_frame_data(scouts, df_games_info.columns.values.tolist())
+        transformed_data = _transform_api_data_to_data_frame_data(scouts, df_games_info.columns.values.tolist())
+        aggr_df_games_info = pd.concat([aggr_df_games_info,transformed_data]).groupby(level=0).sum()
+    return aggr_df_games_info
     
 def _switch_helper(column, df_api_data):
     shotsOT = lambda index: df_api_data.loc[index,"FD"] + df_api_data.loc[index,"FT"] + df_api_data.loc[index,"G"]
@@ -136,14 +139,16 @@ def _switch_helper(column, df_api_data):
         "SHOTS OT PG A": lambda isHomeTeam: shotsOT("away") if not isHomeTeam else 0,
         "TOTAL SHOTS H": lambda isHomeTeam: totalShots("home") if isHomeTeam else 0,
         "TOTAL SHOTS A": lambda isHomeTeam: totalShots("away") if not isHomeTeam else 0,
-        "GF H": lambda isHomeTeam: df_api_data.loc["home","G"] if isHomeTeam else 0,
-        "GA H": lambda isHomeTeam: df_api_data.loc["away","G"] if isHomeTeam else 0,
-        "GF A": lambda isHomeTeam: df_api_data.loc["away","G"] if not isHomeTeam else 0,
-        "GA A": lambda isHomeTeam: df_api_data.loc["home","G"] if not isHomeTeam else 0,
+        "GF H": lambda isHomeTeam: df_api_data.loc["home","G"] + df_api_data.loc["away","GC"] if isHomeTeam else 0,
+        "GA H": lambda isHomeTeam: df_api_data.loc["away","G"] + df_api_data.loc["home","GC"] if isHomeTeam else 0,
+        "GF A": lambda isHomeTeam: df_api_data.loc["away","G"] + df_api_data.loc["home","GC"] if not isHomeTeam else 0,
+        "GA A": lambda isHomeTeam: df_api_data.loc["home","G"] + df_api_data.loc["away","GC"] if not isHomeTeam else 0,
         "TOTAL SHOTS AGA H": lambda isHomeTeam: totalShots("away") if isHomeTeam else 0,
         "TOTAL SHOTS AGA A": lambda isHomeTeam: totalShots("home") if not isHomeTeam else 0,
         "SHOTS OT AGA H": lambda isHomeTeam: shotsOT("away") if isHomeTeam else 0,
         "SHOTS OT AGA A": lambda isHomeTeam: shotsOT("home") if not isHomeTeam else 0,
+        "MATCHES H": lambda isHomeTeam: 1 if isHomeTeam else 0,
+        "MATCHES A": lambda isHomeTeam: 1 if not isHomeTeam else 0,
     }
 
     if column in switch:
@@ -161,15 +166,22 @@ def _transform_api_data_to_data_frame_data(df_api_data, df_columns):
         func = _switch_helper(column, df_api_data)
         transformed_data.loc[team_home_id,column] = func(True)
         transformed_data.loc[team_away_id,column] = func(False)
+    
+    return transformed_data
 
 def fill_data_with_last_5(df_data):
+    num_rounds = 10
     round = get_round_games_from_api(None)
     last_round = round["rodada"] - 1
 
-    for curr_round in range(last_round,last_round-5,-1):
+    aggr_df_games_info = df_data.copy()
+    for curr_round in range(last_round,last_round-num_rounds,-1):
         round_games = get_round_games_from_api(curr_round)
         round_info = get_round_info_from_api(curr_round)
-        fill_data_frame_with_round_games_info(round_games, round_info, df_data)
+        aggr_df_games_info = fill_data_frame_with_round_games_info(round_games, round_info, aggr_df_games_info)
+
+    aggr_df_games_info.div(5).to_csv("output")  #fazer funcao de divisao pelo numero de jogos na tabela
+    
 
 df_data = create_df_data()
 
