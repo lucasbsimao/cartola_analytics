@@ -73,10 +73,7 @@ def create_df_data():
     df = pd.DataFrame(0,columns=columns,index=times)
     return df
 
-def get_info_last_5(text):
-    return int(text) if text.isdigit() else text
-
-def fill_data_frame_with_round_games_info(round_games, round_players_info, df_games_info):
+def fill_data_frame_with_round_games_info(round_games, round_players_info, df_metrics):
 
     api_columns = {
         "ID_TEAM":[],
@@ -102,7 +99,7 @@ def fill_data_frame_with_round_games_info(round_games, round_players_info, df_ga
         "PS":[] # PS: "Penalti sofrido"
     }
 
-    aggr_df_games_info = df_games_info.copy()
+    aggr_df_metrics = df_metrics.copy()
     for match in round_games["partidas"]:
         team_home = match["clube_casa_id"]
         team_away = match["clube_visitante_id"]
@@ -126,9 +123,9 @@ def fill_data_frame_with_round_games_info(round_games, round_players_info, df_ga
                 for sc in player["scout"]:
                     scouts.loc[["away"],[sc]] += player["scout"][sc]
 
-        transformed_data = _transform_api_data_to_data_frame_data(scouts, df_games_info.columns.values.tolist())
-        aggr_df_games_info = pd.concat([aggr_df_games_info,transformed_data]).groupby(level=0).sum()
-    return aggr_df_games_info
+        transformed_data = _transform_api_data_to_data_frame_data(scouts, df_metrics.columns.values.tolist())
+        aggr_df_metrics = pd.concat([aggr_df_metrics,transformed_data]).groupby(level=0).sum()
+    return aggr_df_metrics
     
 def _switch_helper(column, df_api_data):
     shotsOT = lambda index: df_api_data.loc[index,"FD"] + df_api_data.loc[index,"FT"] + df_api_data.loc[index,"G"]
@@ -169,18 +166,51 @@ def _transform_api_data_to_data_frame_data(df_api_data, df_columns):
     
     return transformed_data
 
+def calculate_metrics_with_games_info(df_metrics):
+
+    columns_A = ["SHOTS OT PG H", "TOTAL SHOTS H", "TOTAL SHOTS AGA H", "SHOTS OT AGA H"]
+    df_metrics[columns_A] = df_metrics.loc[:, columns_A].div(df_metrics["MATCHES H"], axis=0)
+
+    columns_A = ["SHOTS OT PG A", "TOTAL SHOTS A", "TOTAL SHOTS AGA A", "SHOTS OT AGA A"]
+    df_metrics[columns_A] = df_metrics.loc[:, columns_A].div(df_metrics["MATCHES A"], axis=0)
+    
+    df_metrics["MGF H"] = df_metrics.loc[:, ["GF H"]].div(df_metrics["MATCHES H"], axis=0)
+    df_metrics["MGA H"] = df_metrics.loc[:, ["GA H"]].div(df_metrics["MATCHES H"], axis=0)
+
+    df_metrics["MGF A"] = df_metrics.loc[:, ["GF A"]].div(df_metrics["MATCHES A"], axis=0)
+    df_metrics["MGA A"] = df_metrics.loc[:, ["GA A"]].div(df_metrics["MATCHES A"], axis=0)
+
+    df_metrics["SHOTS OT PG"] = df_metrics.loc[:, ["SHOTS OT PG H", "SHOTS OT PG A"]].sum(axis=1).div(2)
+    df_metrics["TOTAL SHOTS"] = df_metrics.loc[:, ["TOTAL SHOTS H", "TOTAL SHOTS A"]].sum(axis=1).div(2)
+    df_metrics["TOTAL SHOTS AGA"] = df_metrics.loc[:, ["TOTAL SHOTS AGA H", "TOTAL SHOTS AGA A"]].sum(axis=1).div(2)
+    df_metrics["SHOTS OT AGA TOTAL"] = df_metrics.loc[:, ["SHOTS OT AGA H", "SHOTS OT AGA A"]].sum(axis=1).div(2)
+    
+    df_mgf_mean = df_metrics.loc[:, ["MGF H", "MGF A"]].sum(axis=1).div(2)
+    df_metrics["FIN POR GOL FEITO"] = df_metrics.loc[:,["SHOTS OT PG"]].div(df_mgf_mean, axis=0)
+    df_metrics["FIN P GOL F H"] = df_metrics.loc[:,["SHOTS OT PG H"]].div(df_metrics["MGF H"], axis=0)
+    df_metrics["FIN P GOL F A"] = df_metrics.loc[:,["SHOTS OT PG A"]].div(df_metrics["MGF A"], axis=0)
+
+    df_mga_mean = df_metrics.loc[:, ["MGA H", "MGA A"]].sum(axis=1).div(2)
+    df_metrics["FIN POR GOL TOM"] = df_metrics.loc[:,["SHOTS OT AGA TOTAL"]].div(df_mga_mean, axis=0)
+    df_metrics["FIN P GOL T H"] = df_metrics.loc[:,["SHOTS OT AGA H"]].div(df_metrics["MGA H"], axis=0)
+    df_metrics["FIN P GOL T A"] = df_metrics.loc[:,["SHOTS OT AGA A"]].div(df_metrics["MGA A"], axis=0)
+
+    df_metrics = df_metrics.round(2)
+
+    return df_metrics
+
 def fill_data_with_last_5(df_data):
     num_rounds = 10
     round = get_round_games_from_api(None)
     last_round = round["rodada"] - 1
 
-    aggr_df_games_info = df_data.copy()
+    df_metrics = df_data.copy()
     for curr_round in range(last_round,last_round-num_rounds,-1):
         round_games = get_round_games_from_api(curr_round)
         round_info = get_round_info_from_api(curr_round)
-        aggr_df_games_info = fill_data_frame_with_round_games_info(round_games, round_info, aggr_df_games_info)
+        df_metrics = fill_data_frame_with_round_games_info(round_games, round_info, df_metrics)
 
-    aggr_df_games_info.div(5).to_csv("output")  #fazer funcao de divisao pelo numero de jogos na tabela
+    df_data = calculate_metrics_with_games_info(df_metrics)
     
 
 df_data = create_df_data()
