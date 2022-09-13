@@ -28,8 +28,8 @@ def get_round_info_from_api(round=None):
     response = requests.request("GET", url, headers=headers)
     return response.json()
 
-def create_df_data():
-    columns = {
+def create_dfs():
+    columns_game = {
         "SHOTS OT PG":[],
         "SHOTS OT PG H":[],
         "SHOTS OT PG A":[],
@@ -60,18 +60,44 @@ def create_df_data():
         "FIN P GOL T A":[]
     }
 
+    columns_indicators = {
+        "HOME":[],
+        "shotsMultiOTH":[],
+        "shotsMultiTotH":[],
+        "shotsMultiH":[],
+        "goalsMultiH":[],
+        "goalsMultiTH":[],
+        "taxFinH":[],
+        "taxFinTotalH":[],
+        "resultShotsDivFinH":[],
+        "AWAY":[],
+        "shotsMultiOTA":[],
+        "shotsMultiTotA":[],
+        "shotsMultiA":[],
+        "goalsMultiA":[],
+        "goalsMultiTA":[],
+        "taxFinA":[],
+        "taxFinTotalA":[],
+        "resultShotsDivFinA":[]
+    }
+
     rodada = get_round_games_from_api()
 
-    times = [] #dataframe coluna 1 id coluna 2 abreviacao
+    teams_home = []
+    teams_away = []
 
     for partida in rodada["partidas"]:
         abreviacao_time_casa = rodada["clubes"][str(partida["clube_casa_id"])]["id"]
         abreviacao_time_fora = rodada["clubes"][str(partida["clube_visitante_id"])]["id"]
-        times.append(abreviacao_time_casa)
-        times.append(abreviacao_time_fora)
+        teams_home.append(abreviacao_time_casa)
+        teams_away.append(abreviacao_time_fora)
 
-    df = pd.DataFrame(0,columns=columns,index=times)
-    return df
+    df_indicators = pd.DataFrame(0,columns=columns_indicators, index=range(0,10,1))
+    df_indicators["HOME"] = teams_home
+    df_indicators["AWAY"] = teams_away
+
+    df_game_info = pd.DataFrame(0,columns=columns_game, index=[*teams_home,*teams_away])
+    return df_game_info, df_indicators
 
 def fill_data_frame_with_round_games_info(round_games, round_players_info, df_metrics):
 
@@ -166,7 +192,7 @@ def _transform_api_data_to_data_frame_data(df_api_data, df_columns):
     
     return transformed_data
 
-def calculate_metrics_with_games_info(df_metrics):
+def calculate_games_info_metrics(df_metrics):
 
     columns_A = ["SHOTS OT PG H", "TOTAL SHOTS H", "TOTAL SHOTS AGA H", "SHOTS OT AGA H"]
     df_metrics[columns_A] = df_metrics.loc[:, columns_A].div(df_metrics["MATCHES H"], axis=0)
@@ -199,7 +225,69 @@ def calculate_metrics_with_games_info(df_metrics):
 
     return df_metrics
 
-def fill_data_with_last_5(df_data):
+def _team_id_to_abreviation_helper():
+    rodada = get_round_games_from_api()
+
+    teams_abr = {}
+
+    for partida in rodada["partidas"]:
+        team_home_id = rodada["clubes"][str(partida["clube_casa_id"])]["id"]
+        team_away_id = rodada["clubes"][str(partida["clube_visitante_id"])]["id"]
+
+        team_home_abr = rodada["clubes"][str(partida["clube_casa_id"])]["abreviacao"]
+        team_away_abr = rodada["clubes"][str(partida["clube_visitante_id"])]["abreviacao"]
+        
+        teams_abr[str(team_home_id)] = team_home_abr
+        teams_abr[str(team_away_id)] = team_away_abr
+    
+    return teams_abr
+
+def calculate_indicators_with_games_info(df_games_info, df_indicators):
+    team_abr = _team_id_to_abreviation_helper()
+
+    for index, row in df_indicators.iterrows():
+        home = row["HOME"]
+        away = row["AWAY"]
+
+        df_indicators.loc[index,"shotsMultiOTH"] = df_games_info.loc[home,"SHOTS OT PG H"] * df_games_info.loc[away,"SHOTS OT AGA A"]
+        df_indicators.loc[index,"shotsMultiOTA"] = df_games_info.loc[away,"SHOTS OT PG A"] * df_games_info.loc[home,"SHOTS OT AGA H"]
+
+        df_indicators.loc[index,"shotsMultiH"] = df_games_info.loc[home,"TOTAL SHOTS"] * df_games_info.loc[away,"TOTAL SHOTS AGA"]/10
+        df_indicators.loc[index,"shotsMultiA"] = df_games_info.loc[away,"TOTAL SHOTS"] * df_games_info.loc[home,"TOTAL SHOTS AGA"]/10
+
+        df_indicators.loc[index,"shotsMultiTotH"] = df_games_info.loc[home,"TOTAL SHOTS H"] * df_games_info.loc[away,"TOTAL SHOTS AGA H"]/10
+        df_indicators.loc[index,"shotsMultiTotA"] = df_games_info.loc[away,"TOTAL SHOTS A"] * df_games_info.loc[home,"TOTAL SHOTS AGA A"]/10
+
+        df_indicators.loc[index,"goalsMultiH"] = df_games_info.loc[home,"MGF H"] * df_games_info.loc[away,"MGA A"]
+        df_indicators.loc[index,"goalsMultiA"] = df_games_info.loc[away,"MGF A"] * df_games_info.loc[home,"MGA H"]
+
+        df_indicators.loc[index,"goalsMultiTH"] = (df_games_info.loc[home,"MGF H"] + df_games_info.loc[home,"MGF A"])/2  * (df_games_info.loc[away,"MGA A"] + df_games_info.loc[away,"MGA H"])/2
+        df_indicators.loc[index,"goalsMultiTA"] = (df_games_info.loc[away,"MGF H"] + df_games_info.loc[away,"MGF A"])/2  * (df_games_info.loc[home,"MGA A"] + df_games_info.loc[home,"MGA H"])/2
+
+        df_indicators.loc[index,"taxFinTotalH"] = df_games_info.loc[home,"FIN POR GOL FEITO"] * df_games_info.loc[away,"FIN POR GOL TOM"]
+        df_indicators.loc[index,"taxFinTotalA"] = df_games_info.loc[away,"FIN POR GOL FEITO"] * df_games_info.loc[home,"FIN POR GOL TOM"]
+
+        df_indicators.loc[index,"taxFinH"] = df_games_info.loc[home,"FIN P GOL F H"] * df_games_info.loc[away,"FIN P GOL T A"]
+        df_indicators.loc[index,"taxFinA"] = df_games_info.loc[away,"FIN P GOL F A"] * df_games_info.loc[home,"FIN P GOL T H"]
+
+        shotsDivFinH = df_games_info.loc[home,"SHOTS OT PG H"] / df_games_info.loc[away,"FIN P GOL T A"]
+        shotsDivFinA = df_games_info.loc[away,"SHOTS OT PG A"] / df_games_info.loc[home,"FIN P GOL T H"]
+
+        savesDivFinH = df_games_info.loc[away,"SHOTS OT AGA A"] / df_games_info.loc[home,"FIN P GOL F H"]
+        savesDivFinA = df_games_info.loc[home,"SHOTS OT AGA H"] / df_games_info.loc[away,"FIN P GOL F A"]
+
+        df_indicators.loc[index,"resultShotsDivFinH"] = (shotsDivFinH + savesDivFinH)/2
+        df_indicators.loc[index,"resultShotsDivFinA"] = (shotsDivFinA + savesDivFinA)/2
+
+        df_indicators.loc[index,"HOME"] = team_abr[str(home)]
+        df_indicators.loc[index,"AWAY"] = team_abr[str(away)]
+    
+    df_indicators = df_indicators.round(2)
+
+    return df_indicators
+
+
+def fill_games_info_with_last_5(df_data):
     num_rounds = 10
     round = get_round_games_from_api(None)
     last_round = round["rodada"] - 1
@@ -210,13 +298,15 @@ def fill_data_with_last_5(df_data):
         round_info = get_round_info_from_api(curr_round)
         df_metrics = fill_data_frame_with_round_games_info(round_games, round_info, df_metrics)
 
-    df_data = calculate_metrics_with_games_info(df_metrics)
+    df_data = calculate_games_info_metrics(df_metrics)
+    return df_data
     
 
-df_data = create_df_data()
+df_games_info, df_indicators = create_dfs()
 
-fill_data_with_last_5(df_data)
+df_games_info = fill_games_info_with_last_5(df_games_info)
+df_indicators = calculate_indicators_with_games_info(df_games_info, df_indicators)
 
+df_indicators.to_csv("output2")
 
-    
 
