@@ -217,14 +217,14 @@ class Cartola:
         df_metrics["SHOTS OT AGA TOTAL"] = df_metrics.loc[:, ["SHOTS OT AGA H", "SHOTS OT AGA A"]].sum(axis=1).div(2)
         
         df_mgf_mean = df_metrics.loc[:, ["MGF H", "MGF A"]].sum(axis=1).div(2)
-        df_metrics["FIN POR GOL FEITO"] = df_metrics.loc[:,["SHOTS OT PG"]].div(df_mgf_mean, axis=0)
-        df_metrics["FIN P GOL F H"] = df_metrics.loc[:,["SHOTS OT PG H"]].div(df_metrics["MGF H"], axis=0)
-        df_metrics["FIN P GOL F A"] = df_metrics.loc[:,["SHOTS OT PG A"]].div(df_metrics["MGF A"], axis=0)
+        df_metrics["FIN POR GOL FEITO"] = df_metrics.loc[:,["TOTAL SHOTS"]].div(df_mgf_mean, axis=0)
+        df_metrics["FIN P GOL F H"] = df_metrics.loc[:,["TOTAL SHOTS H"]].div(df_metrics["MGF H"], axis=0)
+        df_metrics["FIN P GOL F A"] = df_metrics.loc[:,["TOTAL SHOTS A"]].div(df_metrics["MGF A"], axis=0)
 
         df_mga_mean = df_metrics.loc[:, ["MGA H", "MGA A"]].sum(axis=1).div(2)
-        df_metrics["FIN POR GOL TOM"] = df_metrics.loc[:,["SHOTS OT AGA TOTAL"]].div(df_mga_mean, axis=0)
-        df_metrics["FIN P GOL T H"] = df_metrics.loc[:,["SHOTS OT AGA H"]].div(df_metrics["MGA H"], axis=0)
-        df_metrics["FIN P GOL T A"] = df_metrics.loc[:,["SHOTS OT AGA A"]].div(df_metrics["MGA A"], axis=0)
+        df_metrics["FIN POR GOL TOM"] = df_metrics.loc[:,["TOTAL SHOTS AGA"]].div(df_mga_mean, axis=0)
+        df_metrics["FIN P GOL T H"] = df_metrics.loc[:,["TOTAL SHOTS AGA H"]].div(df_metrics["MGA H"], axis=0)
+        df_metrics["FIN P GOL T A"] = df_metrics.loc[:,["TOTAL SHOTS AGA A"]].div(df_metrics["MGA A"], axis=0)
 
         df_metrics = df_metrics.round(2)
         df_metrics.to_csv('metrics')
@@ -276,17 +276,17 @@ class Cartola:
             self.df_indicators.loc[index,"taxFinH"] = self.df_games_info.loc[home,"FIN P GOL F H"] * self.df_games_info.loc[away,"FIN P GOL T A"]
             self.df_indicators.loc[index,"taxFinA"] = self.df_games_info.loc[away,"FIN P GOL F A"] * self.df_games_info.loc[home,"FIN P GOL T H"]
 
-            shotsDivFinH = self.df_games_info.loc[home,"SHOTS OT PG H"] / self.df_games_info.loc[away,"FIN P GOL T A"]
-            shotsDivFinA = self.df_games_info.loc[away,"SHOTS OT PG A"] / self.df_games_info.loc[home,"FIN P GOL T H"]
+            shotsDivFinH = self.df_games_info.loc[home,"TOTAL SHOTS H"] / self.df_games_info.loc[away,"FIN P GOL T A"]
+            shotsDivFinA = self.df_games_info.loc[away,"TOTAL SHOTS A"] / self.df_games_info.loc[home,"FIN P GOL T H"]
 
-            savesDivFinH = self.df_games_info.loc[away,"SHOTS OT AGA A"] / self.df_games_info.loc[home,"FIN P GOL F H"]
-            savesDivFinA = self.df_games_info.loc[home,"SHOTS OT AGA H"] / self.df_games_info.loc[away,"FIN P GOL F A"]
+            savesDivFinH = self.df_games_info.loc[away,"TOTAL SHOTS AGA A"] / self.df_games_info.loc[home,"FIN P GOL F H"]
+            savesDivFinA = self.df_games_info.loc[home,"TOTAL SHOTS AGA H"] / self.df_games_info.loc[away,"FIN P GOL F A"]
 
             self.df_indicators.loc[index,"resultShotsDivFinH"] = (shotsDivFinH + savesDivFinH)/2
             self.df_indicators.loc[index,"resultShotsDivFinA"] = (shotsDivFinA + savesDivFinA)/2
 
-            self.df_indicators.loc[index,"HOME"] = team_abr[str(home)]
-            self.df_indicators.loc[index,"AWAY"] = team_abr[str(away)]
+            self.df_indicators.loc[index,"HOME"] = home
+            self.df_indicators.loc[index,"AWAY"] = away
         
         self.df_indicators = self.df_indicators.round(2)
 
@@ -313,11 +313,41 @@ class Cartola:
         return self.df_games_info
     
 
-cartola = Cartola()
+def fill_games_result(df_indicators, round_games):
 
-cartola.fill_games_info_with_last_rounds(10)
-df_indicators = cartola.calculate_indicators_with_games_info()
+    cartola = Cartola()
+    team_abr = cartola._team_id_to_abreviation_helper()
 
-df_indicators.to_csv("indicators")
+    df_indicators.insert(1, "GOL_H", 0)
+    df_indicators.insert(11, "GOL_A", 0)
+    dict_games = { "home": {}, "away": {} }
 
+    for partida in round_games["partidas"]:
+        dict_games["home"][str(partida["clube_casa_id"])] = partida["placar_oficial_mandante"]
+        dict_games["away"][str(partida["clube_visitante_id"])] = partida["placar_oficial_visitante"]
+    for index, row in df_indicators.iterrows():
+        home = int(row["HOME"])
+        away = int(row["AWAY"])
+        df_indicators.loc[index, "GOL_H"] = dict_games["home"][str(home)]
+        df_indicators.loc[index, "GOL_A"] = dict_games["away"][str(away)]
+        
+        df_indicators.loc[index,"HOME"] = team_abr[str(home)]
+        df_indicators.loc[index,"AWAY"] = team_abr[str(away)]
 
+    return df_indicators
+
+df_total = None
+for round in range(26,10,-1):
+    cartola = Cartola(round)
+
+    cartola.fill_games_info_with_last_rounds(6)
+    df_indicators = cartola.calculate_indicators_with_games_info()
+
+    df_indicators = fill_games_result(df_indicators, cartola.get_round_games_from_api(round))
+    if df_total is None:
+        df_total = df_indicators
+    else:
+        df_total = pd.concat([df_total,df_indicators])
+
+df_total.replace([np.inf, -np.inf], 2000, inplace=True)
+df_total.to_csv("indicators2")
