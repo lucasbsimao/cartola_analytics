@@ -1,2 +1,8 @@
 .dccache
 cartola
+
+indicators*
+metrics*
+
+__pycache__
+.~*
