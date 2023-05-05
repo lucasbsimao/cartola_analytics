@@ -1,7 +1,3 @@
-COMUNIDADE DEV CARTOLA
-
-https://gitter.im/cartrolandofc/dev?at=5d7f945836461106bb2aa3e6
-
 Estado mercado atual
 
 https://api.cartola.globo.com/atletas/mercado
