@@ -51,7 +51,7 @@ class Metrics:
             "FC":[], # FC: "Faltas cometidas",
             "FT":[], # FT: "Finalizações na trave",
             "DS":[], # DS: "Desarme",
-            "PI":[], # PI: "Passes incompletos",
+            "V":[], # V: "Vitória do técnico",
             "FF":[], # FF: "Finalizações para fora",
             "FS":[], # FS: "Faltas sofridas",
             "CA":[], # CA: "Cartos Amarelos",

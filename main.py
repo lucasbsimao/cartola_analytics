@@ -74,7 +74,7 @@ class Cartola:
 
 cartola = Cartola()
 
-df_games_info = cartola.fill_games_info_with_last_rounds(16)
+df_games_info = cartola.fill_games_info_with_last_rounds(6)
 
 
 
