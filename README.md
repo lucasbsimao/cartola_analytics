@@ -42,5 +42,3 @@ payload: {
         serviceId: 4728
 
 }
-
-git -c user.email="lucasborsattosimao@hotmail.com" -c user.name="Lucas Borsatto Simao" commit -m "Separação das classes"
