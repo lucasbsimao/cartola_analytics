@@ -60,13 +60,13 @@ class Cartola:
             
             print("Calculating games info for round " + str(curr_round))
             
-            dict_games_info[str(curr_round)] = round_mt.calculate_games_info_metrics(round_games, round_info)
-            # dict_round_df_metrics[str(curr_round)] = self.df_games_info.copy()
+            dict_games_info[str(curr_round)] = round_mt.fill_data_frame_with_round_games_info(round_games, round_info)
 
         print("Calculating metrics")
 
         acc_games_info = functools.reduce(lambda first_games_info, sec_games_info: pd.concat([first_games_info,sec_games_info]).groupby(level=0).sum(), dict_games_info.values())
-        ind = Indicators(acc_games_info, self.teams_home, self.teams_away, self.predict_round)
+        
+        ind = Indicators(Metrics.calculate_games_info_metrics(acc_games_info), self.teams_home, self.teams_away, self.predict_round)
         df_indicators = ind.calculate_indicators_with_games_info()
 
         df_indicators.to_csv("indicators")
