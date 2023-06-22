@@ -40,8 +40,8 @@ class Metrics:
         df_game_info = pd.DataFrame(0,columns=columns_game, index=[*teams_home,*teams_away])
         return df_game_info
 
-    def fill_data_frame_with_round_games_info(self, df_games_info, round_games, round_players_info):
-        if df_games_info is None:
+    def fill_data_frame_with_round_games_info(self, round_games, round_players_info):
+        if self.df_games_info is None:
             raise Exception("df_games_info not provided")
 
         api_columns = {
@@ -51,7 +51,7 @@ class Metrics:
             "FC":[], # FC: "Faltas cometidas",
             "FT":[], # FT: "Finalizações na trave",
             "DS":[], # DS: "Desarme",
-            "PI":[], # PI: "Passes incompletos",
+            "V":[], # V: "Vitória do técnico",
             "FF":[], # FF: "Finalizações para fora",
             "FS":[], # FS: "Faltas sofridas",
             "CA":[], # CA: "Cartos Amarelos",
@@ -68,7 +68,7 @@ class Metrics:
             "PS":[] # PS: "Penalti sofrido"
         }
 
-        aggr_df_games_info = df_games_info
+        aggr_df_games_info = self.df_games_info.copy()
         for match in round_games["partidas"]:
             team_home = match["clube_casa_id"]
             team_away = match["clube_visitante_id"]
@@ -92,7 +92,7 @@ class Metrics:
                     for sc in player["scout"]:
                         scouts.loc[["away"],[sc]] += player["scout"][sc]
 
-            transformed_data = self._transform_api_data_to_data_frame_data(scouts, df_games_info.columns.values.tolist())
+            transformed_data = self._transform_api_data_to_data_frame_data(scouts, self.df_games_info.columns.values.tolist())
             aggr_df_games_info = pd.concat([aggr_df_games_info,transformed_data]).groupby(level=0).sum()
         return aggr_df_games_info
         
@@ -135,36 +135,37 @@ class Metrics:
         
         return transformed_data
 
-    def calculate_games_info_metrics(self, df_metrics):
+    @staticmethod
+    def calculate_games_info_metrics(df_games_info):
 
         columns_A = ["SHOTS OT PG H", "TOTAL SHOTS H", "TOTAL SHOTS AGA H", "SHOTS OT AGA H"]
-        df_metrics[columns_A] = df_metrics.loc[:, columns_A].div(df_metrics["MATCHES H"], axis=0)
+        df_games_info[columns_A] = df_games_info.loc[:, columns_A].div(df_games_info["MATCHES H"], axis=0)
 
         columns_A = ["SHOTS OT PG A", "TOTAL SHOTS A", "TOTAL SHOTS AGA A", "SHOTS OT AGA A"]
-        df_metrics[columns_A] = df_metrics.loc[:, columns_A].div(df_metrics["MATCHES A"], axis=0)
+        df_games_info[columns_A] = df_games_info.loc[:, columns_A].div(df_games_info["MATCHES A"], axis=0)
         
-        df_metrics["MGF H"] = df_metrics.loc[:, ["GF H"]].div(df_metrics["MATCHES H"], axis=0)
-        df_metrics["MGA H"] = df_metrics.loc[:, ["GA H"]].div(df_metrics["MATCHES H"], axis=0)
+        df_games_info["MGF H"] = df_games_info.loc[:, ["GF H"]].div(df_games_info["MATCHES H"], axis=0)
+        df_games_info["MGA H"] = df_games_info.loc[:, ["GA H"]].div(df_games_info["MATCHES H"], axis=0)
 
-        df_metrics["MGF A"] = df_metrics.loc[:, ["GF A"]].div(df_metrics["MATCHES A"], axis=0)
-        df_metrics["MGA A"] = df_metrics.loc[:, ["GA A"]].div(df_metrics["MATCHES A"], axis=0)
+        df_games_info["MGF A"] = df_games_info.loc[:, ["GF A"]].div(df_games_info["MATCHES A"], axis=0)
+        df_games_info["MGA A"] = df_games_info.loc[:, ["GA A"]].div(df_games_info["MATCHES A"], axis=0)
 
-        df_metrics["SHOTS OT PG"] = df_metrics.loc[:, ["SHOTS OT PG H", "SHOTS OT PG A"]].sum(axis=1).div(2)
-        df_metrics["TOTAL SHOTS"] = df_metrics.loc[:, ["TOTAL SHOTS H", "TOTAL SHOTS A"]].sum(axis=1).div(2)
-        df_metrics["TOTAL SHOTS AGA"] = df_metrics.loc[:, ["TOTAL SHOTS AGA H", "TOTAL SHOTS AGA A"]].sum(axis=1).div(2)
-        df_metrics["SHOTS OT AGA TOTAL"] = df_metrics.loc[:, ["SHOTS OT AGA H", "SHOTS OT AGA A"]].sum(axis=1).div(2)
+        df_games_info["SHOTS OT PG"] = df_games_info.loc[:, ["SHOTS OT PG H", "SHOTS OT PG A"]].sum(axis=1).div(2)
+        df_games_info["TOTAL SHOTS"] = df_games_info.loc[:, ["TOTAL SHOTS H", "TOTAL SHOTS A"]].sum(axis=1).div(2)
+        df_games_info["TOTAL SHOTS AGA"] = df_games_info.loc[:, ["TOTAL SHOTS AGA H", "TOTAL SHOTS AGA A"]].sum(axis=1).div(2)
+        df_games_info["SHOTS OT AGA TOTAL"] = df_games_info.loc[:, ["SHOTS OT AGA H", "SHOTS OT AGA A"]].sum(axis=1).div(2)
         
-        df_mgf_mean = df_metrics.loc[:, ["MGF H", "MGF A"]].sum(axis=1).div(2)
-        df_metrics["FIN POR GOL FEITO"] = df_metrics.loc[:,["SHOTS OT PG"]].div(df_mgf_mean, axis=0)
-        df_metrics["FIN P GOL F H"] = df_metrics.loc[:,["SHOTS OT PG H"]].div(df_metrics["MGF H"], axis=0)
-        df_metrics["FIN P GOL F A"] = df_metrics.loc[:,["SHOTS OT PG A"]].div(df_metrics["MGF A"], axis=0)
+        df_mgf_mean = df_games_info.loc[:, ["MGF H", "MGF A"]].sum(axis=1).div(2)
+        df_games_info["FIN POR GOL FEITO"] = df_games_info.loc[:,["SHOTS OT PG"]].div(df_mgf_mean, axis=0)
+        df_games_info["FIN P GOL F H"] = df_games_info.loc[:,["SHOTS OT PG H"]].div(df_games_info["MGF H"], axis=0)
+        df_games_info["FIN P GOL F A"] = df_games_info.loc[:,["SHOTS OT PG A"]].div(df_games_info["MGF A"], axis=0)
 
-        df_mga_mean = df_metrics.loc[:, ["MGA H", "MGA A"]].sum(axis=1).div(2)
-        df_metrics["FIN POR GOL TOM"] = df_metrics.loc[:,["SHOTS OT AGA TOTAL"]].div(df_mga_mean, axis=0)
-        df_metrics["FIN P GOL T H"] = df_metrics.loc[:,["SHOTS OT AGA H"]].div(df_metrics["MGA H"], axis=0)
-        df_metrics["FIN P GOL T A"] = df_metrics.loc[:,["SHOTS OT AGA A"]].div(df_metrics["MGA A"], axis=0)
+        df_mga_mean = df_games_info.loc[:, ["MGA H", "MGA A"]].sum(axis=1).div(2)
+        df_games_info["FIN POR GOL TOM"] = df_games_info.loc[:,["SHOTS OT AGA TOTAL"]].div(df_mga_mean, axis=0)
+        df_games_info["FIN P GOL T H"] = df_games_info.loc[:,["SHOTS OT AGA H"]].div(df_games_info["MGA H"], axis=0)
+        df_games_info["FIN P GOL T A"] = df_games_info.loc[:,["SHOTS OT AGA A"]].div(df_games_info["MGA A"], axis=0)
 
-        df_metrics = df_metrics.round(2)
-        df_metrics.to_csv('metrics')
+        df_games_info = df_games_info.round(2)
+        df_games_info.to_csv('metrics')
 
-        return df_metrics
+        return df_games_info

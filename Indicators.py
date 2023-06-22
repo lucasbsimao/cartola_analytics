@@ -83,17 +83,17 @@ class Indicators:
             self.df_indicators.loc[index,"shotsMultiTotH"] = self.df_games_info.loc[home,"TOTAL SHOTS H"] * self.df_games_info.loc[away,"TOTAL SHOTS AGA H"]/10
             self.df_indicators.loc[index,"shotsMultiTotA"] = self.df_games_info.loc[away,"TOTAL SHOTS A"] * self.df_games_info.loc[home,"TOTAL SHOTS AGA A"]/10
 
-            self.df_indicators.loc[index,"goalsMultiH"] = self.df_games_info.loc[home,"MGF H"] * self.df_games_info.loc[away,"MGA A"]
-            self.df_indicators.loc[index,"goalsMultiA"] = self.df_games_info.loc[away,"MGF A"] * self.df_games_info.loc[home,"MGA H"]
+            self.df_indicators.loc[index,"goalsMultiH"] = (self.df_games_info.loc[home,"MGF H"] + self.df_games_info.loc[away,"MGA A"])/2
+            self.df_indicators.loc[index,"goalsMultiA"] = (self.df_games_info.loc[away,"MGF A"] + self.df_games_info.loc[home,"MGA H"])/2
 
             self.df_indicators.loc[index,"goalsMultiTH"] = (self.df_games_info.loc[home,"MGF H"] + self.df_games_info.loc[home,"MGF A"])/2  * (self.df_games_info.loc[away,"MGA A"] + self.df_games_info.loc[away,"MGA H"])/2
             self.df_indicators.loc[index,"goalsMultiTA"] = (self.df_games_info.loc[away,"MGF H"] + self.df_games_info.loc[away,"MGF A"])/2  * (self.df_games_info.loc[home,"MGA A"] + self.df_games_info.loc[home,"MGA H"])/2
 
-            self.df_indicators.loc[index,"taxFinTotalH"] = self.df_games_info.loc[home,"FIN POR GOL FEITO"] * self.df_games_info.loc[away,"FIN POR GOL TOM"]
-            self.df_indicators.loc[index,"taxFinTotalA"] = self.df_games_info.loc[away,"FIN POR GOL FEITO"] * self.df_games_info.loc[home,"FIN POR GOL TOM"]
+            self.df_indicators.loc[index,"taxFinTotalH"] = (self.df_games_info.loc[home,"FIN POR GOL FEITO"] + self.df_games_info.loc[away,"FIN POR GOL TOM"])/2
+            self.df_indicators.loc[index,"taxFinTotalA"] = (self.df_games_info.loc[away,"FIN POR GOL FEITO"] + self.df_games_info.loc[home,"FIN POR GOL TOM"])/2
 
-            self.df_indicators.loc[index,"taxFinH"] = self.df_games_info.loc[home,"FIN P GOL F H"] * self.df_games_info.loc[away,"FIN P GOL T A"]
-            self.df_indicators.loc[index,"taxFinA"] = self.df_games_info.loc[away,"FIN P GOL F A"] * self.df_games_info.loc[home,"FIN P GOL T H"]
+            self.df_indicators.loc[index,"taxFinH"] = (self.df_games_info.loc[home,"FIN P GOL F H"] + self.df_games_info.loc[away,"FIN P GOL T A"])/2
+            self.df_indicators.loc[index,"taxFinA"] = (self.df_games_info.loc[away,"FIN P GOL F A"] + self.df_games_info.loc[home,"FIN P GOL T H"])/2
 
             shotsDivFinH = self.df_games_info.loc[home,"SHOTS OT PG H"] / self.df_games_info.loc[away,"FIN P GOL T A"]
             shotsDivFinA = self.df_games_info.loc[away,"SHOTS OT PG A"] / self.df_games_info.loc[home,"FIN P GOL T H"]

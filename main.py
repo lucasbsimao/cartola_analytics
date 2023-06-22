@@ -1,4 +1,5 @@
 import requests
+import functools
 import pandas as pd
 
 from Metrics import Metrics
@@ -46,64 +47,26 @@ class Cartola:
         return teams_home, teams_away
 
 
-    def fill_games_info_with_all_rounds(self, num_rounds_to_calculate):
-        round = self.get_round_games_from_api(self.predict_round)
-        last_round = round["rodada"] - 1
-
-        df_round_df_metrics = pd.DataFrame()
-        # dict_round_df_metrics = {}
-        for curr_round in range(1, round["rodada"],+1):
-            mt = Metrics(self.teams_home, self.teams_away, self.predict_round)
-            print("Getting games info from API for round " + str(curr_round))
-            round_games = self.get_round_games_from_api(curr_round)
-            round_info = self.get_round_info_from_api(curr_round)
-            
-            print("Calculating unique games info for round " + str(curr_round))
-            
-            df_round_df_metrics[[str(curr_round)]] = 0
-            #mt.fill_data_frame_with_round_games_info(mt.df_games_info, round_games, round_info)
-        df_round_df_metrics.to_csv("dados")
-        ##################################
-        # mt_temp = Metrics(self.teams_home, self.teams_away, self.predict_round)
-
-        # for curr_round in range(last_round,last_round-num_rounds_to_calculate,-1):            
-        #     print("Calculating acc games info for round " + str(curr_round))
-            
-        #     mt_temp.df_games_info = pd.concat([mt_temp.df_games_info,df_round_df_metrics.iloc[str(curr_round)]]).groupby(level=0).sum()
-
-        # print("Calculating metrics")
-
-        # mt_temp.df_games_info = mt_temp.calculate_games_info_metrics(mt_temp.df_games_info)
-
-        # ind = Indicators(mt_temp.df_games_info, self.teams_home, self.teams_away, self.predict_round)
-        # df_indicators = ind.calculate_indicators_with_games_info()
-
-        # df_indicators.to_csv("indicators")
-
-
-
     def fill_games_info_with_last_rounds(self, num_rounds_to_calculate):
         round = self.get_round_games_from_api(self.predict_round)
         last_round = round["rodada"] - 1
 
-        mt = Metrics(self.teams_home, self.teams_away, self.predict_round)
-
-        # dict_round_df_metrics = {}
+        dict_games_info = {}
         for curr_round in range(last_round,last_round-num_rounds_to_calculate,-1):
             print("Getting games info from API for round " + str(curr_round))
+            round_mt = Metrics(self.teams_home, self.teams_away, self.predict_round)
             round_games = self.get_round_games_from_api(curr_round)
             round_info = self.get_round_info_from_api(curr_round)
             
             print("Calculating games info for round " + str(curr_round))
             
-            mt.df_games_info = mt.fill_data_frame_with_round_games_info(mt.df_games_info, round_games, round_info)
-            # dict_round_df_metrics[str(curr_round)] = self.df_games_info.copy()
+            dict_games_info[str(curr_round)] = round_mt.fill_data_frame_with_round_games_info(round_games, round_info)
 
         print("Calculating metrics")
 
-        mt.df_games_info = mt.calculate_games_info_metrics(mt.df_games_info)
-
-        ind = Indicators(mt.df_games_info, self.teams_home, self.teams_away, self.predict_round)
+        acc_games_info = functools.reduce(lambda first_games_info, sec_games_info: pd.concat([first_games_info,sec_games_info]).groupby(level=0).sum(), dict_games_info.values())
+        
+        ind = Indicators(Metrics.calculate_games_info_metrics(acc_games_info), self.teams_home, self.teams_away, self.predict_round)
         df_indicators = ind.calculate_indicators_with_games_info()
 
         df_indicators.to_csv("indicators")
@@ -111,7 +74,7 @@ class Cartola:
 
 cartola = Cartola(8)
 
-df_games_info = cartola.fill_games_info_with_all_rounds(4)
+df_games_info = cartola.fill_games_info_with_last_rounds(8)
 
 
 
