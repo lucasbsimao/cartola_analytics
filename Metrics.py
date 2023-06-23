@@ -1,4 +1,5 @@
 import pandas as pd
+import functools
 
 class Metrics:
     def __init__(self, teams_home, teams_away, rodada_req=None):
@@ -136,36 +137,37 @@ class Metrics:
         return transformed_data
 
     @staticmethod
-    def calculate_games_info_metrics(df_games_info):
+    def calculate_games_info_metrics(list_df_games_info):
+        acc_df_games_info = functools.reduce(lambda first_games_info, sec_games_info: pd.concat([first_games_info,sec_games_info]).groupby(level=0).sum(), list_df_games_info)
 
         columns_A = ["SHOTS OT PG H", "TOTAL SHOTS H", "TOTAL SHOTS AGA H", "SHOTS OT AGA H"]
-        df_games_info[columns_A] = df_games_info.loc[:, columns_A].div(df_games_info["MATCHES H"], axis=0)
+        acc_df_games_info[columns_A] = acc_df_games_info.loc[:, columns_A].div(acc_df_games_info["MATCHES H"], axis=0)
 
         columns_A = ["SHOTS OT PG A", "TOTAL SHOTS A", "TOTAL SHOTS AGA A", "SHOTS OT AGA A"]
-        df_games_info[columns_A] = df_games_info.loc[:, columns_A].div(df_games_info["MATCHES A"], axis=0)
+        acc_df_games_info[columns_A] = acc_df_games_info.loc[:, columns_A].div(acc_df_games_info["MATCHES A"], axis=0)
         
-        df_games_info["MGF H"] = df_games_info.loc[:, ["GF H"]].div(df_games_info["MATCHES H"], axis=0)
-        df_games_info["MGA H"] = df_games_info.loc[:, ["GA H"]].div(df_games_info["MATCHES H"], axis=0)
+        acc_df_games_info["MGF H"] = acc_df_games_info.loc[:, ["GF H"]].div(acc_df_games_info["MATCHES H"], axis=0)
+        acc_df_games_info["MGA H"] = acc_df_games_info.loc[:, ["GA H"]].div(acc_df_games_info["MATCHES H"], axis=0)
 
-        df_games_info["MGF A"] = df_games_info.loc[:, ["GF A"]].div(df_games_info["MATCHES A"], axis=0)
-        df_games_info["MGA A"] = df_games_info.loc[:, ["GA A"]].div(df_games_info["MATCHES A"], axis=0)
+        acc_df_games_info["MGF A"] = acc_df_games_info.loc[:, ["GF A"]].div(acc_df_games_info["MATCHES A"], axis=0)
+        acc_df_games_info["MGA A"] = acc_df_games_info.loc[:, ["GA A"]].div(acc_df_games_info["MATCHES A"], axis=0)
 
-        df_games_info["SHOTS OT PG"] = df_games_info.loc[:, ["SHOTS OT PG H", "SHOTS OT PG A"]].sum(axis=1).div(2)
-        df_games_info["TOTAL SHOTS"] = df_games_info.loc[:, ["TOTAL SHOTS H", "TOTAL SHOTS A"]].sum(axis=1).div(2)
-        df_games_info["TOTAL SHOTS AGA"] = df_games_info.loc[:, ["TOTAL SHOTS AGA H", "TOTAL SHOTS AGA A"]].sum(axis=1).div(2)
-        df_games_info["SHOTS OT AGA TOTAL"] = df_games_info.loc[:, ["SHOTS OT AGA H", "SHOTS OT AGA A"]].sum(axis=1).div(2)
+        acc_df_games_info["SHOTS OT PG"] = acc_df_games_info.loc[:, ["SHOTS OT PG H", "SHOTS OT PG A"]].sum(axis=1).div(2)
+        acc_df_games_info["TOTAL SHOTS"] = acc_df_games_info.loc[:, ["TOTAL SHOTS H", "TOTAL SHOTS A"]].sum(axis=1).div(2)
+        acc_df_games_info["TOTAL SHOTS AGA"] = acc_df_games_info.loc[:, ["TOTAL SHOTS AGA H", "TOTAL SHOTS AGA A"]].sum(axis=1).div(2)
+        acc_df_games_info["SHOTS OT AGA TOTAL"] = acc_df_games_info.loc[:, ["SHOTS OT AGA H", "SHOTS OT AGA A"]].sum(axis=1).div(2)
         
-        df_mgf_mean = df_games_info.loc[:, ["MGF H", "MGF A"]].sum(axis=1).div(2)
-        df_games_info["FIN POR GOL FEITO"] = df_games_info.loc[:,["SHOTS OT PG"]].div(df_mgf_mean, axis=0)
-        df_games_info["FIN P GOL F H"] = df_games_info.loc[:,["SHOTS OT PG H"]].div(df_games_info["MGF H"], axis=0)
-        df_games_info["FIN P GOL F A"] = df_games_info.loc[:,["SHOTS OT PG A"]].div(df_games_info["MGF A"], axis=0)
+        df_mgf_mean = acc_df_games_info.loc[:, ["MGF H", "MGF A"]].sum(axis=1).div(2)
+        acc_df_games_info["FIN POR GOL FEITO"] = acc_df_games_info.loc[:,["SHOTS OT PG"]].div(df_mgf_mean, axis=0)
+        acc_df_games_info["FIN P GOL F H"] = acc_df_games_info.loc[:,["SHOTS OT PG H"]].div(acc_df_games_info["MGF H"], axis=0)
+        acc_df_games_info["FIN P GOL F A"] = acc_df_games_info.loc[:,["SHOTS OT PG A"]].div(acc_df_games_info["MGF A"], axis=0)
 
-        df_mga_mean = df_games_info.loc[:, ["MGA H", "MGA A"]].sum(axis=1).div(2)
-        df_games_info["FIN POR GOL TOM"] = df_games_info.loc[:,["SHOTS OT AGA TOTAL"]].div(df_mga_mean, axis=0)
-        df_games_info["FIN P GOL T H"] = df_games_info.loc[:,["SHOTS OT AGA H"]].div(df_games_info["MGA H"], axis=0)
-        df_games_info["FIN P GOL T A"] = df_games_info.loc[:,["SHOTS OT AGA A"]].div(df_games_info["MGA A"], axis=0)
+        df_mga_mean = acc_df_games_info.loc[:, ["MGA H", "MGA A"]].sum(axis=1).div(2)
+        acc_df_games_info["FIN POR GOL TOM"] = acc_df_games_info.loc[:,["SHOTS OT AGA TOTAL"]].div(df_mga_mean, axis=0)
+        acc_df_games_info["FIN P GOL T H"] = acc_df_games_info.loc[:,["SHOTS OT AGA H"]].div(acc_df_games_info["MGA H"], axis=0)
+        acc_df_games_info["FIN P GOL T A"] = acc_df_games_info.loc[:,["SHOTS OT AGA A"]].div(acc_df_games_info["MGA A"], axis=0)
 
-        df_games_info = df_games_info.round(2)
-        df_games_info.to_csv('metrics')
+        acc_df_games_info = acc_df_games_info.round(2)
+        acc_df_games_info.to_csv('metrics')
 
-        return df_games_info
+        return acc_df_games_info

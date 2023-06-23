@@ -1,5 +1,4 @@
 import requests
-import functools
 import pandas as pd
 
 from Metrics import Metrics
@@ -64,9 +63,7 @@ class Cartola:
 
         print("Calculating metrics")
 
-        acc_games_info = functools.reduce(lambda first_games_info, sec_games_info: pd.concat([first_games_info,sec_games_info]).groupby(level=0).sum(), dict_games_info.values())
-        
-        ind = Indicators(Metrics.calculate_games_info_metrics(acc_games_info), self.teams_home, self.teams_away, self.predict_round)
+        ind = Indicators(Metrics.calculate_games_info_metrics(dict_games_info.values()), self.teams_home, self.teams_away, self.predict_round)
         df_indicators = ind.calculate_indicators_with_games_info()
 
         df_indicators.to_csv("indicators")
