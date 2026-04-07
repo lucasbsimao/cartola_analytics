@@ -12,21 +12,15 @@ class Indicators:
             "HOME": [],
             "shotsMultiOTH": [],
             "shotsMultiTotH": [],
-            "shotsMultiH": [],
             "goalsMultiH": [],
-            "goalsMultiTH": [],
-            "taxFinH": [],
-            "taxFinTotalH": [],
-            "resultShotsDivFinH": [],
+            "convRateH": [],
+            "convRateTotalH": [],
             "AWAY": [],
             "shotsMultiOTA": [],
             "shotsMultiTotA": [],
-            "shotsMultiA": [],
             "goalsMultiA": [],
-            "goalsMultiTA": [],
-            "taxFinA": [],
-            "taxFinTotalA": [],
-            "resultShotsDivFinA": []
+            "convRateA": [],
+            "convRateTotalA": [],
         }
 
         df_indicators = pd.DataFrame(0, columns=columns_indicators, index=range(0, 10, 1))
@@ -80,34 +74,27 @@ class Indicators:
             self.df_indicators.loc[index, "shotsMultiOTH"] = self.df_games_info.loc[home, "SHOTS OT PG H"] * self.df_games_info.loc[away, "SHOTS OT AGA A"]
             self.df_indicators.loc[index, "shotsMultiOTA"] = self.df_games_info.loc[away, "SHOTS OT PG A"] * self.df_games_info.loc[home, "SHOTS OT AGA H"]
 
-            self.df_indicators.loc[index, "shotsMultiH"] = self.df_games_info.loc[home, "TOTAL SHOTS"] * self.df_games_info.loc[away, "TOTAL SHOTS AGA"] / 10
-            self.df_indicators.loc[index, "shotsMultiA"] = self.df_games_info.loc[away, "TOTAL SHOTS"] * self.df_games_info.loc[home, "TOTAL SHOTS AGA"] / 10
-
-            self.df_indicators.loc[index, "shotsMultiTotH"] = self.df_games_info.loc[home, "TOTAL SHOTS H"] * self.df_games_info.loc[away, "TOTAL SHOTS AGA H"] / 10
-            self.df_indicators.loc[index, "shotsMultiTotA"] = self.df_games_info.loc[away, "TOTAL SHOTS A"] * self.df_games_info.loc[home, "TOTAL SHOTS AGA A"] / 10
+            self.df_indicators.loc[index, "shotsMultiTotH"] = self.df_games_info.loc[home, "TOTAL SHOTS H"] * self.df_games_info.loc[away, "TOTAL SHOTS AGA A"] / 10
+            self.df_indicators.loc[index, "shotsMultiTotA"] = self.df_games_info.loc[away, "TOTAL SHOTS A"] * self.df_games_info.loc[home, "TOTAL SHOTS AGA H"] / 10
 
             self.df_indicators.loc[index, "goalsMultiH"] = (self.df_games_info.loc[home, "MGF H"] + self.df_games_info.loc[away, "MGA A"]) / 2
             self.df_indicators.loc[index, "goalsMultiA"] = (self.df_games_info.loc[away, "MGF A"] + self.df_games_info.loc[home, "MGA H"]) / 2
 
-            self.df_indicators.loc[index, "goalsMultiTH"] = (self.df_games_info.loc[home, "MGF H"] + self.df_games_info.loc[home, "MGF A"]) / 2 * (
-                        self.df_games_info.loc[away, "MGA A"] + self.df_games_info.loc[away, "MGA H"]) / 2
-            self.df_indicators.loc[index, "goalsMultiTA"] = (self.df_games_info.loc[away, "MGF H"] + self.df_games_info.loc[away, "MGF A"]) / 2 * (
-                        self.df_games_info.loc[home, "MGA A"] + self.df_games_info.loc[home, "MGA H"]) / 2
+            conv_home_att = self.safe_divide(1, self.df_games_info.loc[home, "FIN P GOL F H"])
+            conv_away_def = self.safe_divide(1, self.df_games_info.loc[away, "FIN P GOL T A"])
+            self.df_indicators.loc[index, "convRateH"] = (conv_home_att + conv_away_def) / 2
 
-            self.df_indicators.loc[index, "taxFinTotalH"] = (self.df_games_info.loc[home, "FIN POR GOL FEITO"] + self.df_games_info.loc[away, "FIN POR GOL TOM"]) / 2
-            self.df_indicators.loc[index, "taxFinTotalA"] = (self.df_games_info.loc[away, "FIN POR GOL FEITO"] + self.df_games_info.loc[home, "FIN POR GOL TOM"]) / 2
+            conv_away_att = self.safe_divide(1, self.df_games_info.loc[away, "FIN P GOL F A"])
+            conv_home_def = self.safe_divide(1, self.df_games_info.loc[home, "FIN P GOL T H"])
+            self.df_indicators.loc[index, "convRateA"] = (conv_away_att + conv_home_def) / 2
 
-            self.df_indicators.loc[index, "taxFinH"] = (self.df_games_info.loc[home, "FIN P GOL F H"] + self.df_games_info.loc[away, "FIN P GOL T A"]) / 2
-            self.df_indicators.loc[index, "taxFinA"] = (self.df_games_info.loc[away, "FIN P GOL F A"] + self.df_games_info.loc[home, "FIN P GOL T H"]) / 2
+            conv_home_att_tot = self.safe_divide(1, self.df_games_info.loc[home, "FIN POR GOL FEITO"])
+            conv_away_def_tot = self.safe_divide(1, self.df_games_info.loc[away, "FIN POR GOL TOM"])
+            self.df_indicators.loc[index, "convRateTotalH"] = (conv_home_att_tot + conv_away_def_tot) / 2
 
-            shotsDivFinH = self.safe_divide(self.df_games_info.loc[home, "SHOTS OT PG H"], self.df_games_info.loc[away, "FIN P GOL T A"])
-            shotsDivFinA = self.safe_divide(self.df_games_info.loc[away, "SHOTS OT PG A"], self.df_games_info.loc[home, "FIN P GOL T H"])
-
-            savesDivFinH = self.safe_divide(self.df_games_info.loc[away, "SHOTS OT AGA A"], self.df_games_info.loc[home, "FIN P GOL F H"])
-            savesDivFinA = self.safe_divide(self.df_games_info.loc[home, "SHOTS OT AGA H"], self.df_games_info.loc[away, "FIN P GOL F A"])
-
-            self.df_indicators.loc[index, "resultShotsDivFinH"] = (shotsDivFinH + savesDivFinH) / 2
-            self.df_indicators.loc[index, "resultShotsDivFinA"] = (shotsDivFinA + savesDivFinA) / 2
+            conv_away_att_tot = self.safe_divide(1, self.df_games_info.loc[away, "FIN POR GOL FEITO"])
+            conv_home_def_tot = self.safe_divide(1, self.df_games_info.loc[home, "FIN POR GOL TOM"])
+            self.df_indicators.loc[index, "convRateTotalA"] = (conv_away_att_tot + conv_home_def_tot) / 2
 
             self.df_indicators.loc[index, "HOME"] = team_abr[str(home)]
             self.df_indicators.loc[index, "AWAY"] = team_abr[str(away)]
