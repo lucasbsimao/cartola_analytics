@@ -3,10 +3,34 @@
 Para rodar, é necessário o seguinte comando:
 
 ```
-bash configurate.sh
-source cartola/bin/activate
-python main.py
+make run
 ```
+
+Ou alternativamente:
+
+```
+uv run python main.py
+```
+
+## Setup
+
+Para instalar as dependências:
+
+```
+make sync
+```
+
+Ou:
+
+```
+uv sync
+```
+
+## Makefile Targets
+
+- `make run` - Executa o programa principal
+- `make sync` - Instala/sincroniza as dependências
+- `make clean` - Remove arquivos de cache e venv
 
 # DOCS
 

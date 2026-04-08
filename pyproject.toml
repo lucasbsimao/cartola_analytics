@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cartola-analytics"
+version = "0.1.0"
+description = "Analytics tool for Cartola FC"
+requires-python = ">=3.14"
+dependencies = [
+    "requests",
+    "pandas",
+    "soccerdata",
+]
+
+[project.optional-dependencies]
+dev = []
