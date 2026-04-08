@@ -30,9 +30,9 @@ class Indicators:
             "cleanSheetProbA": [],
         }
 
-        df_indicators = pd.DataFrame(0, columns=columns_indicators, index=range(0, 10, 1))
-        df_indicators["HOME"] = teams_home
-        df_indicators["AWAY"] = teams_away
+        df_indicators = pd.DataFrame(0.0, columns=columns_indicators, index=range(0, 10, 1))
+        df_indicators["HOME"] = pd.array(teams_home, dtype=object)
+        df_indicators["AWAY"] = pd.array(teams_away, dtype=object)
 
         return df_indicators
 
@@ -72,8 +72,8 @@ class Indicators:
         team_abr = self._team_id_to_abreviation_helper()
 
         for index, row in self.df_indicators.iterrows():
-            home = row["HOME"]
-            away = row["AWAY"]
+            home = int(row["HOME"])
+            away = int(row["AWAY"])
 
             if home not in self.df_games_info.index or away not in self.df_games_info.index:
                 continue  # Skip if team IDs are not found
