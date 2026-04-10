@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import requests
 
@@ -15,17 +16,23 @@ class Indicators:
             "goalsMultiH": [],
             "convRateH": [],
             "convRateTotalH": [],
+            "saveRateH": [],
             "AWAY": [],
             "shotsMultiOTA": [],
             "shotsMultiTotA": [],
             "goalsMultiA": [],
             "convRateA": [],
             "convRateTotalA": [],
+            "saveRateA": [],
+            "scoreProbH": [],
+            "scoreProbA": [],
+            "cleanSheetProbH": [],
+            "cleanSheetProbA": [],
         }
 
-        df_indicators = pd.DataFrame(0, columns=columns_indicators, index=range(0, 10, 1))
-        df_indicators["HOME"] = teams_home
-        df_indicators["AWAY"] = teams_away
+        df_indicators = pd.DataFrame(0.0, columns=columns_indicators, index=range(0, 10, 1))
+        df_indicators["HOME"] = pd.array(teams_home, dtype=object)
+        df_indicators["AWAY"] = pd.array(teams_away, dtype=object)
 
         return df_indicators
 
@@ -65,8 +72,8 @@ class Indicators:
         team_abr = self._team_id_to_abreviation_helper()
 
         for index, row in self.df_indicators.iterrows():
-            home = row["HOME"]
-            away = row["AWAY"]
+            home = int(row["HOME"])
+            away = int(row["AWAY"])
 
             if home not in self.df_games_info.index or away not in self.df_games_info.index:
                 continue  # Skip if team IDs are not found
@@ -95,6 +102,16 @@ class Indicators:
             conv_away_att_tot = self.safe_divide(1, self.df_games_info.loc[away, "FIN POR GOL FEITO"])
             conv_home_def_tot = self.safe_divide(1, self.df_games_info.loc[home, "FIN POR GOL TOM"])
             self.df_indicators.loc[index, "convRateTotalA"] = (conv_away_att_tot + conv_home_def_tot) / 2
+
+            self.df_indicators.loc[index, "saveRateH"] = 1 - self.safe_divide(self.df_games_info.loc[home, "MGA H"], self.df_games_info.loc[home, "SHOTS OT AGA H"])
+            self.df_indicators.loc[index, "saveRateA"] = 1 - self.safe_divide(self.df_games_info.loc[away, "MGA A"], self.df_games_info.loc[away, "SHOTS OT AGA A"])
+
+            p_home_scores = 1 - math.exp(-self.df_games_info.loc[home, "MGF H"])
+            p_away_scores = 1 - math.exp(-self.df_games_info.loc[away, "MGF A"])
+            self.df_indicators.loc[index, "scoreProbH"] = p_home_scores
+            self.df_indicators.loc[index, "scoreProbA"] = p_away_scores
+            self.df_indicators.loc[index, "cleanSheetProbH"] = 1 - p_away_scores
+            self.df_indicators.loc[index, "cleanSheetProbA"] = 1 - p_home_scores
 
             self.df_indicators.loc[index, "HOME"] = team_abr[str(home)]
             self.df_indicators.loc[index, "AWAY"] = team_abr[str(away)]
