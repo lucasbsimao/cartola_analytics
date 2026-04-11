@@ -4,6 +4,9 @@ import pandas as pd
 from Metrics import Metrics
 from Indicators import Indicators
 from FBrefFetcher import FBrefFetcher
+from FotmobFetcher import FotmobFetcher
+from SofascoreFetcher import SofascoreFetcher
+from ResilientFetcher import ResilientFetcher
 
 class Cartola:
     def __init__(self, rodada_req=None):
@@ -66,8 +69,12 @@ class Cartola:
 
         aggregated_metrics = Metrics.calculate_games_info_metrics(dict_games_info.values())
         
-        print("Fetching FBref xG data")
-        fetcher = FBrefFetcher(season=2025)
+        print("Fetching xG data")
+        fetcher = ResilientFetcher([
+            FBrefFetcher(season=2026),
+            FotmobFetcher(season=2026),
+            SofascoreFetcher(season=2026),
+        ])
         mapper = fetcher.build_team_mapper()
         
         round_games = self.get_round_games_from_api(self.predict_round)
