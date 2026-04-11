@@ -1,86 +1,94 @@
 import pandas as pd
-import requests
+import soccerdata as sd
 from pathlib import Path
-from datetime import date
-from TeamNameMapper import TeamNameMapper
 
-CACHE_DIR = Path(".fbref_cache")
-CACHE_FILE = CACHE_DIR / f"fbref_brasileirao_{date.today()}.parquet"
+from BaseFetcher import BaseFetcher, FetchBlockedError, CANONICAL_COLUMNS
 
-class FBrefFetcher:
-    def __init__(self, season: int = 2025):
-        self.season = season
-        CACHE_DIR.mkdir(exist_ok=True)
-        self.base_url = "https://fbref.com/en/comps/24"
+# soccerdata stat_type → (canonical_column_for_home, canonical_column_for_away)
+# Key is a substring to find inside the raw MultiIndex column label.
+_COLUMN_MAP: dict[str, dict[str, str]] = {
+    "shooting": {
+        "xg":    ("xg_home",    "xg_away"),
+        "npxg":  ("npxg_home",  "npxg_away"),
+        "xga":   ("xga_home",   "xga_away"),
+    },
+    "misc": {
+        "yellow_cards": ("yellow_cards_home", "yellow_cards_away"),
+    },
+    "defense": {
+        "tackles":   ("tackles_home",   "tackles_away"),
+        "pressures": ("pressures_home", "pressures_away"),
+    },
+    "possession": {
+        "prgp": ("prog_passes_home", "prog_passes_away"),
+    },
+}
 
-    def fetch(self) -> pd.DataFrame:
-        if CACHE_FILE.exists():
-            return pd.read_parquet(CACHE_FILE)
-        df = self._scrape_and_build()
-        if not df.empty:
-            df.to_parquet(CACHE_FILE)
-        return df
+
+class FBrefFetcher(BaseFetcher):
+    SOURCE_NAME = "fbref"
+
+    def __init__(self, season: int = 2026):
+        super().__init__(season=season, cache_dir=Path(".stats_cache"))
 
     def _scrape_and_build(self) -> pd.DataFrame:
-        """Scrape Brasileirão team stats from FBref"""
-        url = f"{self.base_url}/{self.season}/stats/"
-        
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            tables = pd.read_html(url, header=0)
-            # Find the team stats table (usually the first one with team data)
-            df = None
-            for table in tables:
-                if len(table) > 0 and any(col for col in table.columns if 'Squad' in str(col) or 'Team' in str(col) or 'Rk' in str(col)):
-                    df = table
-                    break
-            
-            if df is None and len(tables) > 0:
-                # Fallback: use the first table
-                df = tables[0]
-            
-            if df is None:
-                print("Warning: No FBref data found. Using empty dataframe.")
-                return pd.DataFrame()
-            
-            # Clean up the dataframe
-            df = df.dropna(how='all')
-            return df
+            fbref = sd.FBref(leagues="BRA-Série A", seasons=self.season)
         except Exception as e:
-            print(f"Warning: Error scraping FBref: {e}. Continuing with empty data.")
-            return pd.DataFrame()
+            raise FetchBlockedError(f"FBref init failed: {e}") from e
 
-    def get_team_stats(self, fbref_team_name: str) -> pd.Series | None:
-        df = self.fetch()
-        if df.empty:
-            return None
-        team_index = [idx for idx in df.index if fbref_team_name.lower() in str(idx).lower()]
-        if not team_index:
-            return None
-        return df.loc[team_index[0]]
+        result: dict[str, dict[str, float]] = {}  # team_name → {canonical_col: value}
 
-    def get_fbref_team_names(self) -> list[str]:
-        df = self.fetch()
-        if df.empty:
-            # Return default Brasileirão teams if no data available
-            return [
-                "Flamengo", "Palmeiras", "São Paulo", "Corinthians", "Internacional",
-                "Grêmio", "Atlético Mineiro", "Fluminense", "Botafogo", "Santos",
-                "Bahia", "Fortaleza", "Cruzeiro", "Athletico Paranaense", "Vasco da Gama",
-                "Cuiabá", "Goiás", "América Mineiro", "Bragantino", "Vitória"
-            ]
-        # Extract team names from the dataframe
-        team_names = []
-        for col in df.columns:
-            if 'Squad' in str(col) or 'Team' in str(col):
-                team_names = df[col].tolist()
-                break
-        if not team_names:
-            # Fallback: use index
-            team_names = [str(idx) for idx in df.index]
-        return [str(name) for name in team_names if pd.notna(name)]
+        for stat_type, col_map in _COLUMN_MAP.items():
+            self._inter_request_delay()   # inherited from BaseFetcher — rotates UA + random delay
+            try:
+                raw = fbref.read_team_season_stats(stat_type=stat_type)
+            except Exception as e:
+                msg = str(e).lower()
+                if "403" in msg or "forbidden" in msg or "429" in msg or "rate" in msg:
+                    raise FetchBlockedError(f"FBref blocked on {stat_type}: {e}") from e
+                print(f"[fbref] Warning: could not fetch {stat_type}: {e}")
+                continue
 
-    def build_team_mapper(self) -> TeamNameMapper:
-        return TeamNameMapper(self.get_fbref_team_names())
+            # Flatten MultiIndex: keep only the team-name level in the index
+            if isinstance(raw.index, pd.MultiIndex):
+                idx_names = raw.index.names
+                team_level = next(
+                    (n for n in idx_names if n and "team" in str(n).lower()), None
+                )
+                drop_levels = [n for n in idx_names if n != team_level]
+                raw = raw.reset_index(level=drop_levels, drop=True)
+
+            # Flatten MultiIndex columns into "level0_level1" strings
+            if isinstance(raw.columns, pd.MultiIndex):
+                raw.columns = ["_".join(str(p) for p in col if str(p) != "nan").lower()
+                               for col in raw.columns]
+            else:
+                raw.columns = [str(c).lower() for c in raw.columns]
+
+            for team_name in raw.index:
+                row = raw.loc[team_name]
+                if team_name not in result:
+                    result[team_name] = {}
+                for metric_key, (home_col, away_col) in col_map.items():
+                    home_val, away_val = 0.0, 0.0
+                    for col in raw.columns:
+                        if metric_key in col:
+                            if "home" in col or "_h_" in col or col.endswith("_h"):
+                                v = row[col]
+                                home_val = float(v) if pd.notna(v) else 0.0
+                            elif "away" in col or "_a_" in col or col.endswith("_a"):
+                                v = row[col]
+                                away_val = float(v) if pd.notna(v) else 0.0
+                    result[team_name][home_col] = home_val
+                    result[team_name][away_col] = away_val
+
+        if not result:
+            return pd.DataFrame(columns=CANONICAL_COLUMNS)
+
+        df = pd.DataFrame.from_dict(result, orient="index", columns=None)
+        # Ensure all canonical columns are present (fill missing with 0)
+        for col in CANONICAL_COLUMNS:
+            if col not in df.columns:
+                df[col] = 0.0
+        return df[CANONICAL_COLUMNS]
