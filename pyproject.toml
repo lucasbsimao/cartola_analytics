@@ -13,6 +13,9 @@ dependencies = [
     "soccerdata",
     "rapidfuzz",
     "pyarrow",
+    "fotmob",
+    "tenacity",
+    "fake-useragent",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +23,3 @@ dev = []
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
