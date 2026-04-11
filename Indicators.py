@@ -1,6 +1,7 @@
 import math
 import pandas as pd
 import requests
+import math
 
 class Indicators:
     def __init__(self, df_games_info, teams_home, teams_away, rodada_req=None):
@@ -28,6 +29,20 @@ class Indicators:
             "scoreProbA": [],
             "cleanSheetProbH": [],
             "cleanSheetProbA": [],
+            "xGMultiH": [],
+            "xGMultiA": [],
+            "npxGMultiH": [],
+            "npxGMultiA": [],
+            "xGCleanSheetProbH": [],
+            "xGCleanSheetProbA": [],
+            "pressureIndexH": [],
+            "pressureIndexA": [],
+            "tackleIndexH": [],
+            "tackleIndexA": [],
+            "cardRiskH": [],
+            "cardRiskA": [],
+            "progPassIndexH": [],
+            "progPassIndexA": [],
         }
 
         df_indicators = pd.DataFrame(0.0, columns=columns_indicators, index=range(0, 10, 1))
@@ -112,6 +127,34 @@ class Indicators:
             self.df_indicators.loc[index, "scoreProbA"] = p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbH"] = 1 - p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbA"] = 1 - p_home_scores
+            self.df_indicators.loc[index, "xGMultiH"] = self.df_games_info.loc[home, "XGF H"] * self.df_games_info.loc[away, "XGA A"]
+            self.df_indicators.loc[index, "xGMultiA"] = self.df_games_info.loc[away, "XGF A"] * self.df_games_info.loc[home, "XGA H"]
+
+            self.df_indicators.loc[index, "npxGMultiH"] = self.df_games_info.loc[home, "NPXGF H"] * self.df_games_info.loc[away, "XGA A"]
+            self.df_indicators.loc[index, "npxGMultiA"] = self.df_games_info.loc[away, "NPXGF A"] * self.df_games_info.loc[home, "XGA H"]
+
+            xga_away = self.df_games_info.loc[away, "XGA A"]
+            self.df_indicators.loc[index, "xGCleanSheetProbH"] = math.exp(-xga_away) if xga_away >= 0 else 0.0
+
+            xga_home = self.df_games_info.loc[home, "XGA H"]
+            self.df_indicators.loc[index, "xGCleanSheetProbA"] = math.exp(-xga_home) if xga_home >= 0 else 0.0
+
+            pressure_home = self.df_games_info.loc[home, "PRESSURE IDX H"]
+            pressure_away = self.df_games_info.loc[away, "PRESSURE IDX A"]
+            self.df_indicators.loc[index, "pressureIndexH"] = (pressure_home + pressure_away) / 2 if (pressure_home + pressure_away) > 0 else 0.0
+
+            pressure_away_opp = self.df_games_info.loc[away, "PRESSURE IDX A"]
+            pressure_home_opp = self.df_games_info.loc[home, "PRESSURE IDX H"]
+            self.df_indicators.loc[index, "pressureIndexA"] = (pressure_away_opp + pressure_home_opp) / 2 if (pressure_away_opp + pressure_home_opp) > 0 else 0.0
+
+            self.df_indicators.loc[index, "tackleIndexH"] = (self.df_games_info.loc[home, "TACKLE IDX H"] + self.df_games_info.loc[away, "TACKLE IDX A"]) / 2
+            self.df_indicators.loc[index, "tackleIndexA"] = (self.df_games_info.loc[away, "TACKLE IDX A"] + self.df_games_info.loc[home, "TACKLE IDX H"]) / 2
+
+            self.df_indicators.loc[index, "cardRiskH"] = self.df_games_info.loc[home, "CARD RISK H"]
+            self.df_indicators.loc[index, "cardRiskA"] = self.df_games_info.loc[away, "CARD RISK A"]
+
+            self.df_indicators.loc[index, "progPassIndexH"] = (self.df_games_info.loc[home, "PROG PASS IDX H"] + self.df_games_info.loc[away, "PROG PASS IDX A"]) / 2
+            self.df_indicators.loc[index, "progPassIndexA"] = (self.df_games_info.loc[away, "PROG PASS IDX A"] + self.df_games_info.loc[home, "PROG PASS IDX H"]) / 2
 
             self.df_indicators.loc[index, "HOME"] = team_abr[str(home)]
             self.df_indicators.loc[index, "AWAY"] = team_abr[str(away)]

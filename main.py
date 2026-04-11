@@ -3,6 +3,7 @@ import pandas as pd
 
 from Metrics import Metrics
 from Indicators import Indicators
+from FBrefFetcher import FBrefFetcher
 
 class Cartola:
     def __init__(self, rodada_req=None):
@@ -63,7 +64,23 @@ class Cartola:
 
         print("Calculating metrics")
 
-        ind = Indicators(Metrics.calculate_games_info_metrics(dict_games_info.values()), self.teams_home, self.teams_away, self.predict_round)
+        aggregated_metrics = Metrics.calculate_games_info_metrics(dict_games_info.values())
+        
+        print("Fetching FBref xG data")
+        fetcher = FBrefFetcher(season=2025)
+        mapper = fetcher.build_team_mapper()
+        
+        round_games = self.get_round_games_from_api(self.predict_round)
+        team_abbrev_map = {
+            int(club_id): club_data["abreviacao"]
+            for club_id, club_data in round_games["clubes"].items()
+        }
+        
+        temp_m = Metrics(self.teams_home, self.teams_away)
+        temp_m.df_games_info = aggregated_metrics
+        temp_m.fill_xg_stats(fetcher, mapper, team_abbrev_map)
+
+        ind = Indicators(temp_m.df_games_info, self.teams_home, self.teams_away, self.predict_round)
         df_indicators = ind.calculate_indicators_with_games_info()
 
         df_indicators.to_csv("indicators")
