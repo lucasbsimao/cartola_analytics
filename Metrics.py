@@ -1,6 +1,18 @@
 import pandas as pd
 import functools
 
+# Mapping: (df_games_info home column, df_games_info away column) →
+#          (canonical home column,      canonical away column)
+_XG_COLUMN_MAP = [
+    ("XGF H",           "XGF A",          "xg_home",           "xg_away"),
+    ("XGA H",           "XGA A",          "xga_home",          "xga_away"),
+    ("NPXGF H",         "NPXGF A",        "npxg_home",         "npxg_away"),
+    ("PRESSURE IDX H",  "PRESSURE IDX A", "pressures_home",    "pressures_away"),
+    ("TACKLE IDX H",    "TACKLE IDX A",   "tackles_home",      "tackles_away"),
+    ("CARD RISK H",     "CARD RISK A",    "yellow_cards_home", "yellow_cards_away"),
+    ("PROG PASS IDX H", "PROG PASS IDX A","prog_passes_home",  "prog_passes_away"),
+]
+
 class Metrics:
     def __init__(self, teams_home, teams_away, rodada_req=None):
         self.predict_round = rodada_req
@@ -187,36 +199,16 @@ class Metrics:
         return acc_df_games_info
 
     def fill_xg_stats(self, fetcher, mapper, team_abbrev_map: dict):
-        df = fetcher.fetch()
         for team_id in self.df_games_info.index:
             abbrev = team_abbrev_map.get(team_id)
             if abbrev is None:
                 continue
-            fbref_name = mapper.cartola_to_fbref(abbrev)
-            if fbref_name is None:
+            team_name = mapper.cartola_to_fbref(abbrev)
+            if team_name is None:
                 continue
-            row = fetcher.get_team_stats(fbref_name)
+            row = fetcher.get_team_stats(team_name)
             if row is None:
                 continue
-            self.df_games_info.loc[team_id, "XGF H"] = self._safe_get(row, "xg", "home", default=0.0)
-            self.df_games_info.loc[team_id, "XGA H"] = self._safe_get(row, "xga", "home", default=0.0)
-            self.df_games_info.loc[team_id, "NPXGF H"] = self._safe_get(row, "npxg", "home", default=0.0)
-            self.df_games_info.loc[team_id, "PRESSURE IDX H"] = self._safe_get(row, "pressure_regains", "home", default=0.0)
-            self.df_games_info.loc[team_id, "TACKLE IDX H"] = self._safe_get(row, "tackles", "home", default=0.0)
-            self.df_games_info.loc[team_id, "CARD RISK H"] = self._safe_get(row, "yellow_cards", "home", default=0.0)
-            self.df_games_info.loc[team_id, "PROG PASS IDX H"] = self._safe_get(row, "prgp", "home", default=0.0)
-            self.df_games_info.loc[team_id, "XGF A"] = self._safe_get(row, "xg", "away", default=0.0)
-            self.df_games_info.loc[team_id, "XGA A"] = self._safe_get(row, "xga", "away", default=0.0)
-            self.df_games_info.loc[team_id, "NPXGF A"] = self._safe_get(row, "npxg", "away", default=0.0)
-            self.df_games_info.loc[team_id, "PRESSURE IDX A"] = self._safe_get(row, "pressure_regains", "away", default=0.0)
-            self.df_games_info.loc[team_id, "TACKLE IDX A"] = self._safe_get(row, "tackles", "away", default=0.0)
-            self.df_games_info.loc[team_id, "CARD RISK A"] = self._safe_get(row, "yellow_cards", "away", default=0.0)
-            self.df_games_info.loc[team_id, "PROG PASS IDX A"] = self._safe_get(row, "prgp", "away", default=0.0)
-
-    @staticmethod
-    def _safe_get(row, metric: str, split: str, default=0.0):
-        for key in row.index:
-            if metric.lower() in str(key).lower() and split.lower() in str(key).lower():
-                val = row[key]
-                return float(val) if pd.notna(val) else default
-        return default
+            for home_col, away_col, can_home, can_away in _XG_COLUMN_MAP:
+                self.df_games_info.loc[team_id, home_col] = float(row.get(can_home, 0.0) or 0.0)
+                self.df_games_info.loc[team_id, away_col] = float(row.get(can_away, 0.0) or 0.0)
