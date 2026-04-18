@@ -66,7 +66,7 @@ class Cartola:
         ind = Indicators(Metrics.calculate_games_info_metrics(dict_games_info.values()), self.teams_home, self.teams_away, self.predict_round)
         df_indicators = ind.calculate_indicators_with_games_info()
 
-        df_indicators.to_csv("indicators")
+        df_indicators.to_csv("indicators.csv")
     
 
 cartola = Cartola()
