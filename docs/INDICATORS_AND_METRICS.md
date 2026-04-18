@@ -351,6 +351,38 @@ Real xG requires per-shot location and body-part data the Cartola API does not e
 
 ---
 
+## Layer 4 — Lineup Optimisation (`LineupOptimizer.py`)
+
+Consumes `players.csv`. Solves a 0/1 ILP per allowed formation to
+maximise `Σ expCartolaTotal` subject to:
+- exactly 11 starters + 1 GK in the configured position mix,
+- total `preco ≤ budget`,
+- only players with `status_weight > 0` are eligible.
+
+Captain is selected post-solve as the starter with the highest
+`captainValue` (upside-skewed expected captain score).
+
+Supported formations: `3-4-3`, `3-5-2`, `4-3-3`, `4-4-2`, `4-5-1`,
+`5-3-2`, `5-4-1`. Solver: CBC (via `pulp`).
+
+Run:
+
+    uv run python LineupOptimizer.py --budget 120
+
+Optional `--formations 4-3-3,4-4-2` restricts the search. Output
+`lineup.csv` contains the 11 chosen players plus an `is_captain`
+column. Console prints the top-3 formations by expected total.
+
+### Known limitations
+- No per-club cap (Cartola imposes no league-wide cap, but some
+  private leagues do — can be added as a constraint).
+- Bench (4 reserves in Cartola Pro) not selected.
+- Objective is pure expected value; risk-adjusted modes
+  (maximise `floorCartola`, maximise `captainValue`) are extension
+  points on `optimize`.
+
+---
+
 ## Validation
 
 `Backtest.py` replays past rounds through the pipeline and compares
@@ -379,4 +411,5 @@ The following files define all indicators and metrics. Any change to these files
 - `PlayerIndicators.py` — Layer 3 per-player expected scouts, `expCartolaTotal`, `costEfficiency`
 - `main.py` — Pipeline orchestration, look-back window, API calls
 - `Backtest.py` — Validation harness replaying past rounds against actual `pontuacao`
+- `LineupOptimizer.py` — Layer 4 ILP squad selection over `players.csv`
 - `docs/CARTOLA_SCOUTS.md` — Scout point values reference

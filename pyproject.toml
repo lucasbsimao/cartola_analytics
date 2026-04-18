@@ -11,6 +11,7 @@ dependencies = [
     "requests",
     "pandas",
     "soccerdata",
+    "pulp>=2.7",
 ]
 
 [project.optional-dependencies]
