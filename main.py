@@ -30,6 +30,10 @@ class Cartola:
         url = "https://api.cartola.globo.com/atletas/pontuados/"
         return self._request(url, round)
 
+    def get_market_info_from_api(self):
+        """Current mercado snapshot: latest status_id and preco_num per athlete."""
+        return self._request("https://api.cartola.globo.com/atletas/mercado", None)
+
     def _create_teams_array(self):
         round_games = self.get_round_games_from_api(self.predict_round)
         if self.predict_round is None:
@@ -84,11 +88,36 @@ class Cartola:
     def _run_player_pipeline(self):
         print("Calculating player metrics")
         list_df_players = []
-        for curr_round, (_round_games, round_info) in self.round_payloads.items():
+        for curr_round, (round_games, round_info) in self.round_payloads.items():
             pm = PlayerMetrics(self.predict_round)
-            list_df_players.append(pm.fill_data_frame_with_round_players_info(round_info))
+            list_df_players.append(
+                pm.fill_data_frame_with_round_players_info(round_games, round_info, curr_round)
+            )
 
         df_players_rates = PlayerMetrics.calculate_player_rate_metrics(list_df_players)
+
+        print("Fetching current mercado snapshot for status_id / preco_num")
+        mercado = self.get_market_info_from_api()
+        mercado_rows = []
+        for a in mercado.get("atletas", []):
+            mercado_rows.append({
+                "atleta_id": a.get("atleta_id"),
+                "status_id_mkt": a.get("status_id"),
+                "preco_num_mkt": a.get("preco_num"),
+            })
+        if mercado_rows:
+            df_mkt = pd.DataFrame(mercado_rows).set_index("atleta_id")
+            df_players_rates = df_players_rates.join(df_mkt, how="left")
+            # Prefer fresh mercado values where available
+            df_players_rates["status_id"] = df_players_rates["status_id_mkt"].combine_first(
+                df_players_rates["status_id"]
+            )
+            df_players_rates["preco_num"] = df_players_rates["preco_num_mkt"].combine_first(
+                df_players_rates["preco_num"]
+            )
+            df_players_rates = df_players_rates.drop(columns=["status_id_mkt", "preco_num_mkt"])
+
+        df_players_rates.to_csv("players_metrics.csv")
 
         team_abr = {}
         for i, (h, a) in enumerate(zip(self.teams_home, self.teams_away)):
@@ -106,6 +135,7 @@ class Cartola:
             self.predict_round,
         )
         self.df_players = pi.calculate_player_indicators()
+        self.df_players.to_csv("players.csv")
 
 
 cartola = Cartola()

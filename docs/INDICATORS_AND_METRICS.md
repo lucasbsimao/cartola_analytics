@@ -207,7 +207,9 @@ Full set: `expA_H/A`, `expFT_H/A`, `expFD_H/A`, `expFF_H/A`, `expFS_H/A`, `expPS
 | `expPS_H/A` | ATK, MEI | PS (+1.0) |
 | `expDS_H/A` | ALL (esp. ZAG, LAT, MEI) | DS (+1.5) |
 | `expCA_H/A` | ALL (negative) | CA (−1.0) |
-| `xCPA` | ALL | G, FT, FD, FF |
+| `xCPA` | ALL | G, A, FT, FD, FF |
+| `xCPD` | ZAG, LAT, MEI | DS, SG, FS, CA |
+| `gkDefenseValue` | GK | SG, DE, GS |
 | `expA` | ATK, MEI | A |
 | `expDS` | ALL | DS |
 | `expSG` | GK, ZAG, LAT | SG |
@@ -215,6 +217,12 @@ Full set: `expA_H/A`, `expFT_H/A`, `expFD_H/A`, `expFF_H/A`, `expFS_H/A`, `expPS
 | `expGS` | GK | GS |
 | `expCartolaTotal` | ALL | Net expected Cartola points |
 | `costEfficiency` | ALL | Expected points per Cartola price unit |
+| `floorCartola` | ALL | expCartolaTotal − points_std (safe/bench pick ordering) |
+| `ceilingCartola` | ALL | expCartolaTotal + points_std (upside) |
+| `captainValue` | ALL | ceilingCartola × 1.5 (dobra ordering) |
+| `consistency` | ALL | expCartolaTotal / (points_std + 1) |
+| `valueVsReplacement` | ALL | expCartolaTotal − median(expCartolaTotal | position, eligible) |
+| `formMultiplier` | ALL | last-3-played mean pontuação / overall mean (diagnostic) |
 
 ---
 
@@ -225,22 +233,38 @@ One row per athlete (`players.csv`). The model allocates team-level clash indica
 ### Allocation Model
 
 ```
-team_total_X     = X_H_rate × MATCHES_H + X_A_rate × MATCHES_A   (G uses GF H + GF A directly)
-X_share_player   = safe_divide(player.X_total_window, team_total_X)
-player_expX      = team_expX_{player_side} × X_share_player × availability
+side             = H if player's team plays at home in the predict round, else A
+team_total_X     = X_{side}_rate × MATCHES_{side}                (G uses GF {side} directly)
+X_share_player   = safe_divide(player.X_{side}, team_total_X)
+effective_avail  = availability × sample_weight                  (sample_weight shrinks low-data players)
+player_expX      = team_expX_{side} × X_share_player × effective_avail
+expCartolaTotal  = Σ(exp<X> × points_X) × status_weight          (mercado gate)
 ```
 
 Where `availability = played / games` across the window (from `entrou_em_campo` counts, not season `jogos_num`).
 
 ### Player Metrics (`PlayerMetrics.py`)
 
-Per-athlete aggregation over the look-back window, written to `players_metrics.csv`:
+Per-athlete aggregation over the look-back window, written to `players_metrics.csv` (csv write lives in `main.py`).
 
-- Identity (last seen): `apelido`, `clube_id`, `posicao_id`, `status_id`, `preco_num`.
-- Summed scouts: `G, A, FT, FD, FF, FS, PS, DS, SG, DE, DP, GS, CA, CV, FC, GC, I, PP, PC`.
-- Counters: `games` (appearances in payload), `played` (Σ `entrou_em_campo`).
-- Derived: `<SCOUT>_PG = scout / games`, `availability = played / games`.
-- Técnicos (`posicao_id == 6`) and players with `scout is None` are filtered.
+- Identity (last seen from payloads, overridden by mercado snapshot where available): `apelido`, `clube_id`, `posicao_id`, `status_id`, `preco_num`.
+- Summed scouts: `G, A, FT, FD, FF, FS, PS, DS, SG, DE, DP, GS, CA, CV, FC, GC, I, PP, PC` — plus side-split copies `<SCOUT>_H`, `<SCOUT>_A`.
+- Counters: `games`, `played`, `games_H`, `games_A`, `played_H`, `played_A`.
+- Per-game rates: `<SCOUT>_PG`, `<SCOUT>_PG_H`, `<SCOUT>_PG_A`.
+- Availability: `availability = played / games`.
+- Volatility (rounds with `played==1` only):
+  - `points_PG`  = mean of per-round `pontuacao`
+  - `points_std` = population stdev of per-round `pontuacao`
+  - `points_PG_recent` = mean over the last `FORM_WINDOW=3` played rounds
+  - `rounds_played` = number of rounds included
+- `formMultiplier = points_PG_recent / points_PG` — recency diagnostic, not applied to `expCartolaTotal`.
+- Técnicos (`posicao_id == 6`), players with `scout is None`, and players whose club didn't play in the round are filtered.
+
+### Mercado enrichment (`main.py`)
+
+After aggregation, `main.py` fetches `https://api.cartola.globo.com/atletas/mercado` and overrides `status_id` / `preco_num` with the fresh values. This is the only place these fields come from reliably (the `/atletas/pontuados` endpoint does not expose them).
+
+Cartola `status_id` values: `7 = Provável`, `2 = Dúvida`, `3 = Suspenso`, `5 = Contundido`, `6 = Nulo`.
 
 ### Identity & Fixture Context
 
@@ -251,31 +275,43 @@ Per-athlete aggregation over the look-back window, written to `players_metrics.c
 | `club`, `opponent` | team abbreviations from the predict-round fixture |
 | `is_home` | whether `club` plays at home in the predict round |
 
-### Player Shares
+### Player Shares (side-aware)
 
-| Column | Formula |
-|--------|---------|
-| `G_share` | `safe_divide(player.G, GF H + GF A)` |
-| `A_share` ... `CA_share` | `safe_divide(player.X, X_H_rate × MATCHES_H + X_A_rate × MATCHES_A)` |
+Shares are now computed on the **same side** as the upcoming fixture. If the player's team plays at home next round, shares use the home split; if away, the away split.
 
-Covers `G, A, FT, FD, FF, FS, PS, DS, CA`. Per-team shares sum to `≤ 1.0` — residual is scouts by players not present in any of the last-N payloads (released, untracked, etc.).
+| Column | Formula (side ∈ {H, A}, taken from fixture) |
+|--------|----------------------------------------------|
+| `G_share` | `safe_divide(player.G_{side}, GF {side})` |
+| `A_share` ... `CA_share` | `safe_divide(player.X_{side}, X_{side}_rate × MATCHES_{side})` |
+
+Covers `G, A, FT, FD, FF, FS, PS, DS, CA`. Home/away splits expose players who are dramatically more productive at home without needing manual partitioning.
+
+### Sample-size shrinkage and status gating
+
+- `sample_weight = min(1.0, games / MIN_GAMES)` with `MIN_GAMES = 3`. Low-data players (e.g. 1–2 games observed) have their shares down-weighted linearly.
+- `effective_availability = availability × sample_weight` — all `exp<X>` values use this instead of raw `availability`.
+- `status_weight` gate applied to **final** `expCartolaTotal` only (not to per-scout `exp<X>`, so those remain readable):
+  - `7 → 1.0`, `2 → 0.5`, `3/5/6 → 0.0`, missing → `1.0`.
+- `points_std` also scaled by `status_weight` so `floor`/`ceiling`/`captainValue` respect availability.
 
 ### Expected Events
 
+All `exp<X>` use `effective_availability = availability × sample_weight` in place of raw `availability`.
+
 | Column | Formula | Position gate |
 |--------|---------|---------------|
-| `expG`  | `goalsMulti{side} × G_share × availability` | all |
-| `expA`  | `expA_{side} × A_share × availability` | all |
-| `expFT` | `expFT_{side} × FT_share × availability` | all |
-| `expFD` | `expFD_{side} × FD_share × availability` | all |
-| `expFF` | `expFF_{side} × FF_share × availability` | all |
-| `expFS` | `expFS_{side} × FS_share × availability` | all |
-| `expPS` | `expPS_{side} × PS_share × availability` | all |
-| `expDS` | `expDS_{side} × DS_share × availability` | all |
-| `expCA` | `expCA_{side} × CA_share × availability` | all |
-| `expSG` | `cleanSheetProb{side} × availability` | `position ∈ {1 GK, 2 LAT, 3 ZAG}`, else `0` |
-| `expDE` | `expectedSaves{side} × availability` | `position == 1` (GK), else `0` |
-| `expGS` | `goalsMulti{opposite side} × availability` | `position == 1` (GK), else `0` |
+| `expG`  | `goalsMulti{side} × G_share × effective_availability` | all |
+| `expA`  | `expA_{side} × A_share × effective_availability` | all |
+| `expFT` | `expFT_{side} × FT_share × effective_availability` | all |
+| `expFD` | `expFD_{side} × FD_share × effective_availability` | all |
+| `expFF` | `expFF_{side} × FF_share × effective_availability` | all |
+| `expFS` | `expFS_{side} × FS_share × effective_availability` | all |
+| `expPS` | `expPS_{side} × PS_share × effective_availability` | all |
+| `expDS` | `expDS_{side} × DS_share × effective_availability` | all |
+| `expCA` | `expCA_{side} × CA_share × effective_availability` | all |
+| `expSG` | `cleanSheetProb{side} × effective_availability` | `position ∈ {1 GK, 2 LAT, 3 ZAG}`, else `0` |
+| `expDE` | `expectedSaves{side} × effective_availability` | `position == 1` (GK), else `0` |
+| `expGS` | `goalsMulti{opposite side} × effective_availability` | `position == 1` (GK), else `0` |
 
 Only three scouts are truly position-gated (`SG`, `DE`, `GS`). All others are computed uniformly; shares naturally zero out irrelevant positions (a striker's `DS_share` is small, a defender's `G_share` is small).
 
@@ -283,9 +319,17 @@ Only three scouts are truly position-gated (`SG`, `DE`, `GS`). All others are co
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `xCPA` | `expG·8 + expFT·3 + expFD·1.2 + expFF·0.8` | Expected attacking Cartola points (high-signal offensive scouts only). |
+| `xCPA` | `expG·8 + expA·5 + expFT·3 + expFD·1.2 + expFF·0.8` | Expected **attacking** Cartola points (includes assists). |
+| `xCPD` | `expDS·1.5 + expSG·5 + expFS·0.5 − expCA·1` | Expected **defensive** Cartola points. Rank ZAG/LAT on actual defensive contribution. |
+| `gkDefenseValue` | `expSG·5 + expDE·1.3 − expGS·1` (GK only, else 0) | GK-specific headline. Use this to compare goalkeepers instead of `expCartolaTotal`. |
 | `cardLiability` | `expCA × 1` | Reported positive; subtracted inside `expCartolaTotal`. Useful for filtering yellow-card-prone picks. |
-| `expCartolaTotal` | `expG·8 + expA·5 + expFT·3 + expFD·1.2 + expFF·0.8 + expFS·0.5 + expPS·1 + expDS·1.5 + expSG·5 + expDE·1.3 − expGS·1 − expCA·1` | Net expected Cartola points for the next round. |
+| `expCartolaTotal` | `(expG·8 + expA·5 + expFT·3 + expFD·1.2 + expFF·0.8 + expFS·0.5 + expPS·1 + expDS·1.5 + expSG·5 + expDE·1.3 − expGS·1 − expCA·1) × status_weight` | Net expected Cartola points for the next round, gated by mercado availability. |
+| `floorCartola` | `expCartolaTotal − points_std` | Downside estimate (~P16). Use for safe/bench picks. |
+| `ceilingCartola` | `expCartolaTotal + points_std` | Upside estimate (~P84). Use as captain-pick input. |
+| `captainValue` | `ceilingCartola × 1.5` | Expected captain points under the standard 1.5× dobra. Primary ordering for captaincy. |
+| `consistency` | `expCartolaTotal / (points_std + 1)` | Sharpe-like score. High = stable producer; low = boom-or-bust. |
+| `valueVsReplacement` | `expCartolaTotal − median(expCartolaTotal \| position)` over eligible players | Positional value-above-replacement. Normalises the different scoring scales of GK vs ATK. |
+| `formMultiplier` | passthrough from `PlayerMetrics` | Last-3-played mean / overall mean. Diagnostic only. |
 | `costEfficiency` | `safe_divide(expCartolaTotal, preco)` | Expected points per Cartola price unit; primary pick-ordering metric under budget. |
 
 All columns are rounded to 2 decimal places.
@@ -293,6 +337,10 @@ All columns are rounded to 2 decimal places.
 ### Why no xG column
 
 Real xG requires per-shot location and body-part data the Cartola API does not expose. The `goalsMulti{H/A} × G_share` path carries the honest goal signal, and `xCPA`'s `G·8` term supplies the Cartola-scaled equivalent.
+
+### Why rare negative scouts are omitted
+
+`CV` (red), `GC` (own goal), `PP` (penalty missed), `PC` (penalty committed), `I` (offside), `FC` (foul committed) are summed in `PlayerMetrics.PLAYER_SCOUTS` but not projected in `PlayerIndicators`. These events are infrequent and highly situational; projecting them from 8-round means introduces more noise than signal. Filter manually via `status_id` and domain knowledge. Same reasoning for `expDP` (penalty save): penalty occurrence is not reliably predictable from team rates at this sample size.
 
 ---
 
