@@ -6,3 +6,6 @@ metrics*
 
 __pycache__
 .~*
+
+.fbref_cache
+.stats_cache
