@@ -3,6 +3,7 @@ cartola
 
 indicators*
 metrics*
+players*.csv
 
 __pycache__
 .~*

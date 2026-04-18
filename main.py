@@ -3,6 +3,8 @@ import pandas as pd
 
 from Metrics import Metrics
 from Indicators import Indicators
+from PlayerMetrics import PlayerMetrics
+from PlayerIndicators import PlayerIndicators
 
 class Cartola:
     def __init__(self, rodada_req=None):
@@ -76,7 +78,35 @@ class Cartola:
         self.df_indicators = ind.calculate_indicators_with_games_info()
 
         self.df_indicators.to_csv("indicators.csv")
-    
+
+        self._run_player_pipeline()
+
+    def _run_player_pipeline(self):
+        print("Calculating player metrics")
+        list_df_players = []
+        for curr_round, (_round_games, round_info) in self.round_payloads.items():
+            pm = PlayerMetrics(self.predict_round)
+            list_df_players.append(pm.fill_data_frame_with_round_players_info(round_info))
+
+        df_players_rates = PlayerMetrics.calculate_player_rate_metrics(list_df_players)
+
+        team_abr = {}
+        for i, (h, a) in enumerate(zip(self.teams_home, self.teams_away)):
+            team_abr[str(h)] = self.df_indicators.loc[i, "HOME"]
+            team_abr[str(a)] = self.df_indicators.loc[i, "AWAY"]
+
+        print("Calculating player indicators")
+        pi = PlayerIndicators(
+            df_players_rates,
+            self.df_indicators,
+            self.df_games_info,
+            self.teams_home,
+            self.teams_away,
+            team_abr,
+            self.predict_round,
+        )
+        self.df_players = pi.calculate_player_indicators()
+
 
 cartola = Cartola()
 
