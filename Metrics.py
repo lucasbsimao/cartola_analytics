@@ -1,6 +1,8 @@
 import pandas as pd
 import functools
 
+NEW_TEAM_SCOUTS = ["A", "FT", "FD", "FF", "FS", "PS", "DS", "CA"]
+
 class Metrics:
     def __init__(self, teams_home, teams_away, rodada_req=None):
         self.predict_round = rodada_req
@@ -37,6 +39,12 @@ class Metrics:
             "FIN P GOL T H":[],
             "FIN P GOL T A":[]
         }
+
+        for sc in NEW_TEAM_SCOUTS:
+            columns_game[f"{sc} H"] = []
+            columns_game[f"{sc} A"] = []
+            columns_game[f"{sc} AGA H"] = []
+            columns_game[f"{sc} AGA A"] = []
 
         df_game_info = pd.DataFrame(0,columns=columns_game, index=[*teams_home,*teams_away])
         return df_game_info
@@ -118,6 +126,12 @@ class Metrics:
             "MATCHES A": lambda isHomeTeam: 1 if not isHomeTeam else 0,
         }
 
+        for sc in NEW_TEAM_SCOUTS:
+            switch[f"{sc} H"] = (lambda s: lambda isHomeTeam: df_api_data.loc["home", s] if isHomeTeam else 0)(sc)
+            switch[f"{sc} A"] = (lambda s: lambda isHomeTeam: df_api_data.loc["away", s] if not isHomeTeam else 0)(sc)
+            switch[f"{sc} AGA H"] = (lambda s: lambda isHomeTeam: df_api_data.loc["away", s] if isHomeTeam else 0)(sc)
+            switch[f"{sc} AGA A"] = (lambda s: lambda isHomeTeam: df_api_data.loc["home", s] if not isHomeTeam else 0)(sc)
+
         if column in switch:
             return switch[column]
         else:
@@ -140,10 +154,18 @@ class Metrics:
     def calculate_games_info_metrics(list_df_games_info):
         acc_df_games_info = functools.reduce(lambda first_games_info, sec_games_info: pd.concat([first_games_info,sec_games_info]).groupby(level=0).sum(), list_df_games_info)
 
-        columns_A = ["SHOTS OT PG H", "TOTAL SHOTS H", "TOTAL SHOTS AGA H", "SHOTS OT AGA H"]
+        columns_A = [
+            "SHOTS OT PG H", "TOTAL SHOTS H", "TOTAL SHOTS AGA H", "SHOTS OT AGA H",
+            *[f"{sc} H" for sc in NEW_TEAM_SCOUTS],
+            *[f"{sc} AGA H" for sc in NEW_TEAM_SCOUTS],
+        ]
         acc_df_games_info[columns_A] = acc_df_games_info.loc[:, columns_A].div(acc_df_games_info["MATCHES H"], axis=0)
 
-        columns_A = ["SHOTS OT PG A", "TOTAL SHOTS A", "TOTAL SHOTS AGA A", "SHOTS OT AGA A"]
+        columns_A = [
+            "SHOTS OT PG A", "TOTAL SHOTS A", "TOTAL SHOTS AGA A", "SHOTS OT AGA A",
+            *[f"{sc} A" for sc in NEW_TEAM_SCOUTS],
+            *[f"{sc} AGA A" for sc in NEW_TEAM_SCOUTS],
+        ]
         acc_df_games_info[columns_A] = acc_df_games_info.loc[:, columns_A].div(acc_df_games_info["MATCHES A"], axis=0)
         
         acc_df_games_info["MGF H"] = acc_df_games_info.loc[:, ["GF H"]].div(acc_df_games_info["MATCHES H"], axis=0)
