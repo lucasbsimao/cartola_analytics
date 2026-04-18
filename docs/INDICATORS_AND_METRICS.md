@@ -320,7 +320,7 @@ Only three scouts are truly position-gated (`SG`, `DE`, `GS`). All others are co
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `xCPA` | `expG·8 + expA·5 + expFT·3 + expFD·1.2 + expFF·0.8` | Expected **attacking** Cartola points (includes assists). |
+| `xCPA` | `(expG·8 + expFT·3 + expFD·1.2 + expFF·0.8) × quality_multiplier + expA·5` | Expected attacking Cartola points. Shot-derived terms scaled by quality_multiplier (clamped [0.7, 1.3]) — rewards efficient shooters over volume spammers. |
 | `xCPD` | `expDS·1.5 + expSG·5 + expFS·0.5 − expCA·1` | Expected **defensive** Cartola points. Rank ZAG/LAT on actual defensive contribution. |
 | `gkDefenseValue` | `expSG·5 + expDE·1.3 − expGS·1` (GK only, else 0) | GK-specific headline. Use this to compare goalkeepers instead of `expCartolaTotal`. |
 | `cardLiability` | `expCA × 1` | Reported positive; subtracted inside `expCartolaTotal`. Useful for filtering yellow-card-prone picks. |

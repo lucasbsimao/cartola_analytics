@@ -21,6 +21,8 @@ CAPTAIN_MULTIPLIER = 1.5
 # high-variance picks the way a full ceiling × 1.5 does.
 UPSIDE_SKEW = 0.35
 
+LEAGUE_AVG_QUALITY = 0.35  # approximate league-average on-target shot fraction
+
 
 def safe_divide(numerator, denominator):
     if denominator == 0 or pd.isna(denominator):
@@ -126,7 +128,9 @@ class PlayerIndicators:
 
             # Attacking / defensive decomposition of expected Cartola points.
             # xCPA now includes assists (assists are an offensive scout).
-            xCPA = expG * 8 + expA * 5 + expFT * 3 + expFD * 1.2 + expFF * 0.8
+            raw_quality = float(player.get("shotQuality_share", LEAGUE_AVG_QUALITY) or LEAGUE_AVG_QUALITY)
+            quality_multiplier = max(0.7, min(1.3, raw_quality / LEAGUE_AVG_QUALITY))
+            xCPA = (expG * 8 + expFT * 3 + expFD * 1.2 + expFF * 0.8) * quality_multiplier + expA * 5
             xCPD = expDS * 1.5 + expSG * 5 + expFS * 0.5 - expCA * 1
             # GK-specific value (only meaningful for position == GK).
             gkDefenseValue = (expSG * 5 + expDE * 1.3 - expGS * 1) if position == GK_POSITION else 0.0
@@ -185,6 +189,8 @@ class PlayerIndicators:
                     "PS_share": shares["PS"],
                     "DS_share": shares["DS"],
                     "CA_share": shares["CA"],
+                    "shotQuality_share": raw_quality,
+                    "quality_multiplier": quality_multiplier,
                     "expG": expG,
                     "expA": expA,
                     "expFT": expFT,
