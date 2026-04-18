@@ -2,6 +2,8 @@ import math
 import pandas as pd
 import requests
 
+EXPECTED_SCOUTS = ["A", "FT", "FD", "FF", "FS", "PS", "DS", "CA"]
+
 class Indicators:
     def __init__(self, df_games_info, teams_home, teams_away, rodada_req=None):
         self.predict_round = rodada_req
@@ -29,6 +31,10 @@ class Indicators:
             "scoreProbA": [],
             "cleanSheetProbA": [],
         }
+
+        for sc in EXPECTED_SCOUTS:
+            columns_indicators[f"exp{sc}_H"] = []
+            columns_indicators[f"exp{sc}_A"] = []
 
         df_indicators = pd.DataFrame(0.0, columns=columns_indicators, index=range(0, 10, 1))
         df_indicators["HOME"] = pd.array(teams_home, dtype=object)
@@ -114,6 +120,14 @@ class Indicators:
             self.df_indicators.loc[index, "scoreProbA"] = p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbH"] = 1 - p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbA"] = 1 - p_home_scores
+
+            for sc in EXPECTED_SCOUTS:
+                self.df_indicators.loc[index, f"exp{sc}_H"] = (
+                    self.df_games_info.loc[home, f"{sc} H"] + self.df_games_info.loc[away, f"{sc} AGA A"]
+                ) / 2
+                self.df_indicators.loc[index, f"exp{sc}_A"] = (
+                    self.df_games_info.loc[away, f"{sc} A"] + self.df_games_info.loc[home, f"{sc} AGA H"]
+                ) / 2
 
             self.df_indicators.loc[index, "HOME"] = team_abr[str(home)]
             self.df_indicators.loc[index, "AWAY"] = team_abr[str(away)]
