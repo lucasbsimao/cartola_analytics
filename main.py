@@ -46,27 +46,36 @@ class Cartola:
         return teams_home, teams_away
 
 
-    def fill_games_info_with_last_rounds(self, num_rounds_to_calculate):
+    def _fetch_rounds(self, num_rounds):
         round = self.get_round_games_from_api(self.predict_round)
         last_round = round["rodada"] - 1
 
-        dict_games_info = {}
-        for curr_round in range(last_round,last_round-num_rounds_to_calculate,-1):
+        payloads = {}
+        for curr_round in range(last_round, last_round - num_rounds, -1):
             print("Getting games info from API for round " + str(curr_round))
-            round_mt = Metrics(self.teams_home, self.teams_away, self.predict_round)
             round_games = self.get_round_games_from_api(curr_round)
             round_info = self.get_round_info_from_api(curr_round)
-            
+            payloads[curr_round] = (round_games, round_info)
+        return payloads
+
+    def fill_games_info_with_last_rounds(self, num_rounds_to_calculate):
+        self.round_payloads = self._fetch_rounds(num_rounds_to_calculate)
+
+        dict_games_info = {}
+        for curr_round, (round_games, round_info) in self.round_payloads.items():
+            round_mt = Metrics(self.teams_home, self.teams_away, self.predict_round)
+
             print("Calculating games info for round " + str(curr_round))
-            
+
             dict_games_info[str(curr_round)] = round_mt.fill_data_frame_with_round_games_info(round_games, round_info)
 
         print("Calculating metrics")
 
-        ind = Indicators(Metrics.calculate_games_info_metrics(dict_games_info.values()), self.teams_home, self.teams_away, self.predict_round)
-        df_indicators = ind.calculate_indicators_with_games_info()
+        self.df_games_info = Metrics.calculate_games_info_metrics(dict_games_info.values())
+        ind = Indicators(self.df_games_info, self.teams_home, self.teams_away, self.predict_round)
+        self.df_indicators = ind.calculate_indicators_with_games_info()
 
-        df_indicators.to_csv("indicators.csv")
+        self.df_indicators.to_csv("indicators.csv")
     
 
 cartola = Cartola()
