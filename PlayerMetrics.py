@@ -127,6 +127,10 @@ class PlayerMetrics:
         df["availability"] = df["played"] / games
         df["formMultiplier"] = df["points_PG_recent"] / df["points_PG"].replace(0, pd.NA)
 
+        quality_shots = df["FD"] + df["FT"]
+        total_shots = df["FD"] + df["FT"] + df["FF"]
+        df["shotQuality_share"] = (quality_shots / total_shots.replace(0, pd.NA)).fillna(0.0)
+
         df = df.fillna(0)
 
         numeric_cols = df.select_dtypes(include="number").columns

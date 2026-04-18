@@ -258,6 +258,7 @@ Per-athlete aggregation over the look-back window, written to `players_metrics.c
   - `points_PG_recent` = mean over the last `FORM_WINDOW=3` played rounds
   - `rounds_played` = number of rounds included
 - `formMultiplier = points_PG_recent / points_PG` — recency diagnostic, not applied to `expCartolaTotal`.
+- `shotQuality_share` = `(FD + FT) / (FD + FT + FF)`. Fraction of shots that land on frame. Separates efficient shooters from volume spammers. Range [0, 1]; players with zero shots get 0.0.
 - Técnicos (`posicao_id == 6`), players with `scout is None`, and players whose club didn't play in the round are filtered.
 
 ### Mercado enrichment (`main.py`)
