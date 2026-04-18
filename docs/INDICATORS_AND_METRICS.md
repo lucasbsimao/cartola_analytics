@@ -219,7 +219,7 @@ Full set: `expA_H/A`, `expFT_H/A`, `expFD_H/A`, `expFF_H/A`, `expFS_H/A`, `expPS
 | `costEfficiency` | ALL | Expected points per Cartola price unit |
 | `floorCartola` | ALL | expCartolaTotal − points_std (safe/bench pick ordering) |
 | `ceilingCartola` | ALL | expCartolaTotal + points_std (upside) |
-| `captainValue` | ALL | ceilingCartola × 1.5 (dobra ordering) |
+| `captainValue` | ALL | (expCartolaTotal + 0.35 × points_std) × 1.5 (dobra ordering) |
 | `consistency` | ALL | expCartolaTotal / (points_std + 1) |
 | `valueVsReplacement` | ALL | expCartolaTotal − median(expCartolaTotal | position, eligible) |
 | `formMultiplier` | ALL | last-3-played mean pontuação / overall mean (diagnostic) |
@@ -326,7 +326,7 @@ Only three scouts are truly position-gated (`SG`, `DE`, `GS`). All others are co
 | `expCartolaTotal` | `(expG·8 + expA·5 + expFT·3 + expFD·1.2 + expFF·0.8 + expFS·0.5 + expPS·1 + expDS·1.5 + expSG·5 + expDE·1.3 − expGS·1 − expCA·1) × status_weight` | Net expected Cartola points for the next round, gated by mercado availability. |
 | `floorCartola` | `expCartolaTotal − points_std` | Downside estimate (~P16). Use for safe/bench picks. |
 | `ceilingCartola` | `expCartolaTotal + points_std` | Upside estimate (~P84). Use as captain-pick input. |
-| `captainValue` | `ceilingCartola × 1.5` | Expected captain points under the standard 1.5× dobra. Primary ordering for captaincy. |
+| `captainValue` | `(expCartolaTotal + 0.35 × points_std) × 1.5` | Expected captain points under the standard 1.5× dobra. Upside-skewed mean — 0.35σ of upside rather than full ceiling × 1.5, which over-rewarded high-variance picks. |
 | `consistency` | `expCartolaTotal / (points_std + 1)` | Sharpe-like score. High = stable producer; low = boom-or-bust. |
 | `valueVsReplacement` | `expCartolaTotal − median(expCartolaTotal \| position)` over eligible players | Positional value-above-replacement. Normalises the different scoring scales of GK vs ATK. |
 | `formMultiplier` | passthrough from `PlayerMetrics` | Last-3-played mean / overall mean. Diagnostic only. |

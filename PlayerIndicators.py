@@ -16,6 +16,10 @@ STATUS_WEIGHT = {7: 1.0, 2: 0.5, 3: 0.0, 5: 0.0, 6: 0.0}
 
 # Captain multiplier in standard Cartola scoring (dobra = 1.5x)
 CAPTAIN_MULTIPLIER = 1.5
+# Upside skew for captainValue: fraction of points_std added to the mean before
+# applying the dobra. 0.35σ gives a modest upside tilt without over-rewarding
+# high-variance picks the way a full ceiling × 1.5 does.
+UPSIDE_SKEW = 0.35
 
 
 def safe_divide(numerator, denominator):
@@ -150,7 +154,7 @@ class PlayerIndicators:
             points_std = float(player.get("points_std", 0) or 0) * status_weight
             floorCartola = expCartolaTotal - points_std
             ceilingCartola = expCartolaTotal + points_std
-            captainValue = ceilingCartola * CAPTAIN_MULTIPLIER
+            captainValue = (expCartolaTotal + UPSIDE_SKEW * points_std) * CAPTAIN_MULTIPLIER
             consistency = safe_divide(expCartolaTotal, points_std + 1.0)
 
             preco = float(player.get("preco_num", 0) or 0)
