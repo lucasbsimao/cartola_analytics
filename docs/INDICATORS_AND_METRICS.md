@@ -20,6 +20,12 @@ Layer 1 — Raw Metrics (per team, accumulated over N rounds)
 
 Layer 2 — Match Indicators (per fixture, predictive)
   └── indicators.csv
+
+         ↓  fill_data_frame_with_round_players_info()  [PlayerMetrics.py]
+
+Layer 3 — Player Indicators (per athlete, predictive for next round)
+  ├── PlayerMetrics.calculate_player_rate_metrics() → players_metrics.csv
+  └── PlayerIndicators.calculate_player_indicators() → players.csv
 ```
 
 Default look-back window: **8 previous rounds** (configurable in `main.py`).
@@ -106,6 +112,21 @@ All per-game columns are **normalised per match played** (home or away separatel
 | `FIN P GOL T A` | `SHOTS OT AGA A / MGA A` | Same, away. |
 | `FIN POR GOL TOM` | `SHOTS OT AGA TOTAL / mean(MGA H, MGA A)` | Overall opponent shots-per-goal against this team's defence. |
 
+#### Scout Aggregates (per game)
+
+Eight Cartola scouts are persisted at the team level with the same structure used for shots: team totals at home / away, and opponent totals conceded at home / away. All values are divided by the respective `MATCHES H`/`MATCHES A` inside `calculate_games_info_metrics()`, yielding per-game rates. They feed the clash-averaged `exp<X>_H/A` indicators in Layer 2 and the per-player share allocation in Layer 3.
+
+For each scout `X ∈ {A, FT, FD, FF, FS, PS, DS, CA}`:
+
+| Column | Formula | Rationale |
+|--------|---------|-----------|
+| `X H` | `Σ team X scored at home / MATCHES H` | Per-home-game production rate for scout X. |
+| `X A` | `Σ team X scored away / MATCHES A` | Per-away-game production rate for scout X. |
+| `X AGA H` | `Σ opponents' X against this team at home / MATCHES H` | Per-home-game rate opponents achieve against this team. Defensive exposure. |
+| `X AGA A` | `Σ opponents' X against this team away / MATCHES A` | Per-away-game rate opponents achieve against this team. |
+
+Scouts covered: `A` (assist), `FT` (post), `FD` (on target saved), `FF` (off target), `FS` (foul suffered), `PS` (penalty won), `DS` (tackle), `CA` (yellow card).
+
 ---
 
 ## Layer 2 — Match Indicators (`Indicators.py`)
@@ -139,6 +160,17 @@ These invert the "shots-per-goal" ratios so that **higher = more efficient**.
 | `totalShotConvRateH` | `(1/FIN POR GOL FEITO(home) + 1/FIN POR GOL TOM(away)) / 2` | Same concept but using total shots (on/off target). Broader offensive pressure view. |
 | `totalShotConvRateA` | `(1/FIN POR GOL FEITO(away) + 1/FIN POR GOL TOM(home)) / 2` | Same for away. |
 
+### Clash-Averaged Expected Scouts
+
+For each scout `X ∈ {A, FT, FD, FF, FS, PS, DS, CA}`, the expected per-fixture team value follows the identical averaging pattern as `goalsMultiH/A`:
+
+| Column | Formula | Rationale |
+|--------|---------|-----------|
+| `expX_H` | `(home "X H" + away "X AGA A") / 2` | Home team's home production rate for X, blended with away team's conceding-away rate for X. |
+| `expX_A` | `(away "X A" + home "X AGA H") / 2` | Mirror for away team. |
+
+Full set: `expA_H/A`, `expFT_H/A`, `expFD_H/A`, `expFF_H/A`, `expFS_H/A`, `expPS_H/A`, `expDS_H/A`, `expCA_H/A`.
+
 ### Goalkeeper Expected Saves
 
 | Column | Formula | Rationale |
@@ -167,6 +199,100 @@ These invert the "shots-per-goal" ratios so that **higher = more efficient**.
 | `onTargetConvRateH/A` | ATK | G, FT, FD |
 | `shotsMultiOTH/A` | ATK, MEI | FT (+3.0), FD (+1.2), FF (+0.8) |
 | `goalsMultiH/A` | ATK, MEI | G (+8.0), A (+5.0) |
+| `expA_H/A` | ATK, MEI | A (+5.0) |
+| `expFT_H/A` | ATK, MEI | FT (+3.0) |
+| `expFD_H/A` | ATK, MEI | FD (+1.2) |
+| `expFF_H/A` | ATK, MEI | FF (+0.8) |
+| `expFS_H/A` | ALL | FS (+0.5) |
+| `expPS_H/A` | ATK, MEI | PS (+1.0) |
+| `expDS_H/A` | ALL (esp. ZAG, LAT, MEI) | DS (+1.5) |
+| `expCA_H/A` | ALL (negative) | CA (−1.0) |
+| `xCPA` | ALL | G, FT, FD, FF |
+| `expA` | ATK, MEI | A |
+| `expDS` | ALL | DS |
+| `expSG` | GK, ZAG, LAT | SG |
+| `expDE` | GK | DE |
+| `expGS` | GK | GS |
+| `expCartolaTotal` | ALL | Net expected Cartola points |
+| `costEfficiency` | ALL | Expected points per Cartola price unit |
+
+---
+
+## Layer 3 — Player Indicators (`PlayerIndicators.py`)
+
+One row per athlete (`players.csv`). The model allocates team-level clash indicators to players via share-of-team × availability. Rare scouts (`PP`, `PC`, `GC`, `DP`, `CV`, `I`, `FC`) are not projected; `xCPA` and `expCartolaTotal` capture the high-signal ones only.
+
+### Allocation Model
+
+```
+team_total_X     = X_H_rate × MATCHES_H + X_A_rate × MATCHES_A   (G uses GF H + GF A directly)
+X_share_player   = safe_divide(player.X_total_window, team_total_X)
+player_expX      = team_expX_{player_side} × X_share_player × availability
+```
+
+Where `availability = played / games` across the window (from `entrou_em_campo` counts, not season `jogos_num`).
+
+### Player Metrics (`PlayerMetrics.py`)
+
+Per-athlete aggregation over the look-back window, written to `players_metrics.csv`:
+
+- Identity (last seen): `apelido`, `clube_id`, `posicao_id`, `status_id`, `preco_num`.
+- Summed scouts: `G, A, FT, FD, FF, FS, PS, DS, SG, DE, DP, GS, CA, CV, FC, GC, I, PP, PC`.
+- Counters: `games` (appearances in payload), `played` (Σ `entrou_em_campo`).
+- Derived: `<SCOUT>_PG = scout / games`, `availability = played / games`.
+- Técnicos (`posicao_id == 6`) and players with `scout is None` are filtered.
+
+### Identity & Fixture Context
+
+| Column | Source |
+|--------|--------|
+| `atleta_id` | index |
+| `apelido`, `position`, `status_id`, `preco`, `games`, `availability` | from `df_players_rates` |
+| `club`, `opponent` | team abbreviations from the predict-round fixture |
+| `is_home` | whether `club` plays at home in the predict round |
+
+### Player Shares
+
+| Column | Formula |
+|--------|---------|
+| `G_share` | `safe_divide(player.G, GF H + GF A)` |
+| `A_share` ... `CA_share` | `safe_divide(player.X, X_H_rate × MATCHES_H + X_A_rate × MATCHES_A)` |
+
+Covers `G, A, FT, FD, FF, FS, PS, DS, CA`. Per-team shares sum to `≤ 1.0` — residual is scouts by players not present in any of the last-N payloads (released, untracked, etc.).
+
+### Expected Events
+
+| Column | Formula | Position gate |
+|--------|---------|---------------|
+| `expG`  | `goalsMulti{side} × G_share × availability` | all |
+| `expA`  | `expA_{side} × A_share × availability` | all |
+| `expFT` | `expFT_{side} × FT_share × availability` | all |
+| `expFD` | `expFD_{side} × FD_share × availability` | all |
+| `expFF` | `expFF_{side} × FF_share × availability` | all |
+| `expFS` | `expFS_{side} × FS_share × availability` | all |
+| `expPS` | `expPS_{side} × PS_share × availability` | all |
+| `expDS` | `expDS_{side} × DS_share × availability` | all |
+| `expCA` | `expCA_{side} × CA_share × availability` | all |
+| `expSG` | `cleanSheetProb{side} × availability` | `position ∈ {1 GK, 2 LAT, 3 ZAG}`, else `0` |
+| `expDE` | `expectedSaves{side} × availability` | `position == 1` (GK), else `0` |
+| `expGS` | `goalsMulti{opposite side} × availability` | `position == 1` (GK), else `0` |
+
+Only three scouts are truly position-gated (`SG`, `DE`, `GS`). All others are computed uniformly; shares naturally zero out irrelevant positions (a striker's `DS_share` is small, a defender's `G_share` is small).
+
+### Headline / Derived Indicators
+
+| Column | Formula | Rationale |
+|--------|---------|-----------|
+| `xCPA` | `expG·8 + expFT·3 + expFD·1.2 + expFF·0.8` | Expected attacking Cartola points (high-signal offensive scouts only). |
+| `cardLiability` | `expCA × 1` | Reported positive; subtracted inside `expCartolaTotal`. Useful for filtering yellow-card-prone picks. |
+| `expCartolaTotal` | `expG·8 + expA·5 + expFT·3 + expFD·1.2 + expFF·0.8 + expFS·0.5 + expPS·1 + expDS·1.5 + expSG·5 + expDE·1.3 − expGS·1 − expCA·1` | Net expected Cartola points for the next round. |
+| `costEfficiency` | `safe_divide(expCartolaTotal, preco)` | Expected points per Cartola price unit; primary pick-ordering metric under budget. |
+
+All columns are rounded to 2 decimal places.
+
+### Why no xG column
+
+Real xG requires per-shot location and body-part data the Cartola API does not expose. The `goalsMulti{H/A} × G_share` path carries the honest goal signal, and `xCPA`'s `G·8` term supplies the Cartola-scaled equivalent.
 
 ---
 
@@ -174,7 +300,9 @@ These invert the "shots-per-goal" ratios so that **higher = more efficient**.
 
 The following files define all indicators and metrics. Any change to these files should trigger a review and update of this document.
 
-- `Metrics.py` — Layer 1 aggregation and metric computation
-- `Indicators.py` — Layer 2 indicator formulas and Poisson model
+- `Metrics.py` — Layer 1 team aggregation and metric computation
+- `Indicators.py` — Layer 2 fixture-level indicator formulas and Poisson model
+- `PlayerMetrics.py` — Layer 3 per-player scout aggregation across the look-back window
+- `PlayerIndicators.py` — Layer 3 per-player expected scouts, `expCartolaTotal`, `costEfficiency`
 - `main.py` — Pipeline orchestration, look-back window, API calls
 - `docs/CARTOLA_SCOUTS.md` — Scout point values reference
