@@ -64,7 +64,7 @@ class Cartola:
             payloads[curr_round] = (round_games, round_info)
         return payloads
 
-    def fill_games_info_with_last_rounds(self, num_rounds_to_calculate):
+    def fill_games_info_with_last_rounds(self, num_rounds_to_calculate, write_csv=True):
         self.round_payloads = self._fetch_rounds(num_rounds_to_calculate)
 
         dict_games_info = {}
@@ -82,11 +82,12 @@ class Cartola:
         ind = Indicators(self.df_games_info, self.teams_home, self.teams_away, self.predict_round, baselines=baselines)
         self.df_indicators = ind.calculate_indicators_with_games_info()
 
-        self.df_indicators.to_csv("indicators.csv")
+        if write_csv:
+            self.df_indicators.to_csv("indicators.csv")
 
-        self._run_player_pipeline()
+        self._run_player_pipeline(write_csv=write_csv)
 
-    def _run_player_pipeline(self):
+    def _run_player_pipeline(self, write_csv=True):
         print("Calculating player metrics")
         list_df_players = []
         for curr_round, (round_games, round_info) in self.round_payloads.items():
@@ -118,7 +119,8 @@ class Cartola:
             )
             df_players_rates = df_players_rates.drop(columns=["status_id_mkt", "preco_num_mkt"])
 
-        df_players_rates.to_csv("players_metrics.csv")
+        if write_csv:
+            df_players_rates.to_csv("players_metrics.csv")
 
         team_abr = {}
         for i, (h, a) in enumerate(zip(self.teams_home, self.teams_away)):
@@ -136,12 +138,15 @@ class Cartola:
             self.predict_round,
         )
         self.df_players = pi.calculate_player_indicators()
-        self.df_players.to_csv("players.csv")
+        if write_csv:
+            self.df_players.to_csv("players.csv")
 
 
-cartola = Cartola()
+def run_pipeline(predict_round=None, window=8, write_csv=True):
+    cartola = Cartola(rodada_req=predict_round)
+    cartola.fill_games_info_with_last_rounds(window, write_csv=write_csv)
+    return cartola.df_indicators, cartola.df_players
 
-df_games_info = cartola.fill_games_info_with_last_rounds(8)
 
-
-
+if __name__ == "__main__":
+    run_pipeline(window=8)
