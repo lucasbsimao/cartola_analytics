@@ -351,6 +351,24 @@ Real xG requires per-shot location and body-part data the Cartola API does not e
 
 ---
 
+## Validation
+
+`Backtest.py` replays past rounds through the pipeline and compares
+predicted `expCartolaTotal` to actual `pontuacao` for players who
+played (`entrou_em_campo == True`). Run:
+
+    python Backtest.py --start 5 --end 15 --window 8
+
+Output:
+- `backtest_detail.csv` — per-player per-round predictions vs actuals.
+- `backtest_summary.csv` — RMSE, MAE, Spearman rank-correlation sliced
+  by overall, position, price bucket (quartile), and round.
+
+Use Spearman for ranking use cases (captain, pick order) and RMSE for
+scoring accuracy (squad expected-value estimates).
+
+---
+
 ## Tracked Source Files
 
 The following files define all indicators and metrics. Any change to these files should trigger a review and update of this document.
@@ -360,4 +378,5 @@ The following files define all indicators and metrics. Any change to these files
 - `PlayerMetrics.py` — Layer 3 per-player scout aggregation across the look-back window
 - `PlayerIndicators.py` — Layer 3 per-player expected scouts, `expCartolaTotal`, `costEfficiency`
 - `main.py` — Pipeline orchestration, look-back window, API calls
+- `Backtest.py` — Validation harness replaying past rounds against actual `pontuacao`
 - `docs/CARTOLA_SCOUTS.md` — Scout point values reference
