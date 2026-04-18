@@ -191,6 +191,7 @@ class Metrics:
 
         acc_df_games_info = acc_df_games_info.round(2)
         acc_df_games_info.to_csv('metrics')
+        return acc_df_games_info
 
     @staticmethod
     def calculate_league_baselines(df_games_info):

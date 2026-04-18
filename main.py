@@ -78,7 +78,8 @@ class Cartola:
         print("Calculating metrics")
 
         self.df_games_info = Metrics.calculate_games_info_metrics(dict_games_info.values())
-        ind = Indicators(self.df_games_info, self.teams_home, self.teams_away, self.predict_round)
+        baselines = Metrics.calculate_league_baselines(self.df_games_info)
+        ind = Indicators(self.df_games_info, self.teams_home, self.teams_away, self.predict_round, baselines=baselines)
         self.df_indicators = ind.calculate_indicators_with_games_info()
 
         self.df_indicators.to_csv("indicators.csv")

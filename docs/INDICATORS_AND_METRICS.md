@@ -137,8 +137,8 @@ One row per fixture. Columns come in home (`H`) and away (`A`) pairs. All values
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `shotsMultiOTH` | `SHOTS OT PG H(home_team) × SHOTS OT AGA A(away_team)` | Cross-multiplies home attack output with away defensive exposure. High value = home team likely to create many dangerous chances. |
-| `shotsMultiOTA` | `SHOTS OT PG A(away_team) × SHOTS OT AGA H(home_team)` | Same for the away side. |
+| `shotsMultiOTH` | `SHOTS OT PG H(home) × SHOTS OT AGA A(away) × sos_shots_H` | Cross-multiplies home attack output with away defensive exposure, scaled by opponent's away on-target-conceded rate relative to league baseline. |
+| `shotsMultiOTA` | `SHOTS OT PG A(away) × SHOTS OT AGA H(home) × sos_shots_A` | Same for the away side. |
 | `shotsMultiTotH` | `(TOTAL SHOTS H(home) × TOTAL SHOTS AGA A(away)) / 10` | Total shot pressure interaction, scaled by /10 to normalise magnitude. |
 | `shotsMultiTotA` | `(TOTAL SHOTS A(away) × TOTAL SHOTS AGA H(home)) / 10` | Same for away. |
 
@@ -146,8 +146,14 @@ One row per fixture. Columns come in home (`H`) and away (`A`) pairs. All values
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `goalsMultiH` | `(MGF H(home) + MGA A(away)) / 2` | Blends home team's scoring rate with away team's conceding rate. Simple xG estimate without Poisson. |
-| `goalsMultiA` | `(MGF A(away) + MGA H(home)) / 2` | Same for the away team. |
+| `goalsMultiH` | `((MGF H(home) + MGA A(away)) / 2) × sosH` | Blends home team's scoring rate with away team's conceding rate, adjusted by the opponent's defensive strength relative to the league. Simple xG estimate without Poisson. |
+| `goalsMultiA` | `((MGF A(away) + MGA H(home)) / 2) × sosA` | Same for the away team. |
+| `sosH` | `clamp(MGA A(away) / league_mean(MGA A), 0.7, 1.3)` | Strength-of-schedule multiplier for the home team, based on how much the away opponent concedes on the road relative to the league. 1.0 = league-average opponent; >1 = softer opponent; <1 = tougher. |
+| `sosA` | `clamp(MGA H(home) / league_mean(MGA H), 0.7, 1.3)` | Same for the away side, using home opponent's home defensive rate. |
+
+#### Strength-of-Schedule Adjustment
+
+League baselines (from `Metrics.calculate_league_baselines`) are the mean of each side-split defensive column across the league: `MGA H`, `MGA A`, `SHOTS OT AGA H/A`, and every `<scout> AGA H/A`. For each fixture-side we compute a relative-strength factor = `opponent_defensive_rate / league_baseline`, clamped to `[0.7, 1.3]` to prevent extreme swings on the 8-round sample. This factor is applied to `goalsMulti*`, `shotsMultiOT*`, and every `exp<X>_*`. When the opponent is exactly league-average the multiplier is 1.0 and no adjustment occurs. `sosH`/`sosA` persist the `goalsMulti` SoS for transparency; the shot- and scout-specific SoS factors use their own baselines but are not persisted.
 
 ### Conversion Rate Indicators
 
@@ -166,8 +172,8 @@ For each scout `X ∈ {A, FT, FD, FF, FS, PS, DS, CA}`, the expected per-fixture
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `expX_H` | `(home "X H" + away "X AGA A") / 2` | Home team's home production rate for X, blended with away team's conceding-away rate for X. |
-| `expX_A` | `(away "X A" + home "X AGA H") / 2` | Mirror for away team. |
+| `expX_H` | `((home "X H" + away "X AGA A") / 2) × sos_X_H` | Home team's home production rate for X, blended with away team's conceding-away rate for X, scaled by opponent's away scout-conceding rate relative to league. |
+| `expX_A` | `((away "X A" + home "X AGA H") / 2) × sos_X_A` | Mirror for away team. |
 
 Full set: `expA_H/A`, `expFT_H/A`, `expFD_H/A`, `expFF_H/A`, `expFS_H/A`, `expPS_H/A`, `expDS_H/A`, `expCA_H/A`.
 
