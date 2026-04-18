@@ -4,6 +4,8 @@ cartola
 indicators*
 metrics*
 players*.csv
+backtest_*.csv
+_tmp_backtest_*.csv
 
 __pycache__
 .~*
