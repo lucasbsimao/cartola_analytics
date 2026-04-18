@@ -192,4 +192,24 @@ class Metrics:
         acc_df_games_info = acc_df_games_info.round(2)
         acc_df_games_info.to_csv('metrics')
 
+    @staticmethod
+    def calculate_league_baselines(df_games_info):
+        """League-wide averages used for strength-of-schedule adjustment.
+
+        Returns a dict of scalar baselines. Callers divide team-side values
+        by the corresponding baseline to get a relative-strength multiplier.
+        """
+        base = {
+            "MGF_H": df_games_info["MGF H"].mean(),
+            "MGF_A": df_games_info["MGF A"].mean(),
+            "MGA_H": df_games_info["MGA H"].mean(),
+            "MGA_A": df_games_info["MGA A"].mean(),
+            "SHOTS_OT_AGA_H": df_games_info["SHOTS OT AGA H"].mean(),
+            "SHOTS_OT_AGA_A": df_games_info["SHOTS OT AGA A"].mean(),
+        }
+        for sc in NEW_TEAM_SCOUTS:
+            base[f"{sc}_AGA_H"] = df_games_info[f"{sc} AGA H"].mean()
+            base[f"{sc}_AGA_A"] = df_games_info[f"{sc} AGA A"].mean()
+        return base
+
         return acc_df_games_info
