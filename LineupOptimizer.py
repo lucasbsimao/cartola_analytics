@@ -76,33 +76,53 @@ def solve_formation(df, formation, budget):
     return df.loc[picks].copy()
 
 
-def optimize(df, budget, formations=None, top_k=3):
-    """Run every formation, rank by total expected, assign captain."""
-    to_try = formations or list(FORMATIONS.keys())
-    results = []
-    for f in to_try:
+def _best_across_formations(df, budget, formations):
+    """Run every formation on `df` and return the single best result, or None."""
+    best = None
+    for f in formations:
         lineup = solve_formation(df, f, budget)
         if lineup is None:
             continue
         total = float(lineup["expCartolaTotal"].sum())
-        captain_aid = lineup["captainValue"].idxmax()
-        lineup = lineup.copy()
-        lineup["is_captain"] = lineup.index == captain_aid
-        # Order rows by pitch position: GK, LAT, ZAG, MEI, ATK.
-        lineup = lineup.sort_values(
-            ["position", "expCartolaTotal"], ascending=[True, False]
-        )
-        results.append(
-            {
+        if best is None or total > best["total_expected"]:
+            captain_aid = lineup["captainValue"].idxmax()
+            lineup = lineup.copy()
+            lineup["is_captain"] = lineup.index == captain_aid
+            # Order rows by pitch position: GK, LAT, ZAG, MEI, ATK.
+            lineup = lineup.sort_values(
+                ["position", "expCartolaTotal"], ascending=[True, False]
+            )
+            best = {
                 "formation": f,
                 "total_expected": total,
                 "total_cost": float(lineup["preco"].sum()),
                 "captain": lineup.loc[captain_aid, "apelido"],
                 "lineup": lineup,
             }
-        )
-    results.sort(key=lambda r: r["total_expected"], reverse=True)
-    return results[:top_k]
+    return best
+
+
+def optimize(df, budget, formations=None, top_k=3):
+    """Return up to `top_k` disjoint lineups.
+
+    Tier 1 is the global best across formations. Tier 2 is the best
+    lineup that excludes every player already picked in tier 1. Tier 3
+    excludes the union of tiers 1 and 2. Each tier is free to pick its
+    own best formation independently.
+    """
+    to_try = formations or list(FORMATIONS.keys())
+    results = []
+    used = set()
+    pool = df
+    for _ in range(top_k):
+        if used:
+            pool = df.drop(index=[aid for aid in used if aid in df.index])
+        best = _best_across_formations(pool, budget, to_try)
+        if best is None:
+            break
+        results.append(best)
+        used.update(best["lineup"].index.tolist())
+    return results
 
 
 if __name__ == "__main__":
@@ -142,10 +162,14 @@ if __name__ == "__main__":
         ]
     )
 
-    if len(results) > 1:
-        print("\nRunner-ups:")
-        for r in results[1:]:
-            print(
-                f"  {r['formation']}: {r['total_expected']:.2f} "
-                f"(cost {r['total_cost']:.2f}, cap: {r['captain']})"
-            )
+    for i, r in enumerate(results[1:], start=2):
+        label = {2: "Second", 3: "Third"}.get(i, f"#{i}")
+        print(f"\n{label} team (no overlap with previous): {r['formation']}")
+        print(f"Expected total: {r['total_expected']:.2f}")
+        print(f"Total cost:     {r['total_cost']:.2f}")
+        print(f"Captain:        {r['captain']}")
+        print(
+            r["lineup"][
+                ["apelido", "position", "club", "preco", "expCartolaTotal", "is_captain"]
+            ]
+        )
