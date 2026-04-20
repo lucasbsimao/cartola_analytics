@@ -3,6 +3,11 @@ cartola
 
 indicators*
 metrics*
+players*.csv
+backtest_*.csv
+_tmp_backtest_*.csv
+lineup.csv
+_tmp_lineup*.csv
 
 __pycache__
 .~*

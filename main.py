@@ -3,6 +3,8 @@ import pandas as pd
 
 from Metrics import Metrics
 from Indicators import Indicators
+from PlayerMetrics import PlayerMetrics
+from PlayerIndicators import PlayerIndicators
 
 class Cartola:
     def __init__(self, rodada_req=None):
@@ -27,6 +29,10 @@ class Cartola:
     def get_round_info_from_api(self, round=None):
         url = "https://api.cartola.globo.com/atletas/pontuados/"
         return self._request(url, round)
+
+    def get_market_info_from_api(self):
+        """Current mercado snapshot: latest status_id and preco_num per athlete."""
+        return self._request("https://api.cartola.globo.com/atletas/mercado", None)
 
     def _create_teams_array(self):
         round_games = self.get_round_games_from_api(self.predict_round)
@@ -58,7 +64,7 @@ class Cartola:
             payloads[curr_round] = (round_games, round_info)
         return payloads
 
-    def fill_games_info_with_last_rounds(self, num_rounds_to_calculate):
+    def fill_games_info_with_last_rounds(self, num_rounds_to_calculate, write_csv=True):
         self.round_payloads = self._fetch_rounds(num_rounds_to_calculate)
 
         dict_games_info = {}
@@ -72,15 +78,75 @@ class Cartola:
         print("Calculating metrics")
 
         self.df_games_info = Metrics.calculate_games_info_metrics(dict_games_info.values())
-        ind = Indicators(self.df_games_info, self.teams_home, self.teams_away, self.predict_round)
+        baselines = Metrics.calculate_league_baselines(self.df_games_info)
+        ind = Indicators(self.df_games_info, self.teams_home, self.teams_away, self.predict_round, baselines=baselines)
         self.df_indicators = ind.calculate_indicators_with_games_info()
 
-        self.df_indicators.to_csv("indicators.csv")
-    
+        if write_csv:
+            self.df_indicators.to_csv("indicators.csv")
 
-cartola = Cartola()
+        self._run_player_pipeline(write_csv=write_csv)
 
-df_games_info = cartola.fill_games_info_with_last_rounds(8)
+    def _run_player_pipeline(self, write_csv=True):
+        print("Calculating player metrics")
+        list_df_players = []
+        for curr_round, (round_games, round_info) in self.round_payloads.items():
+            pm = PlayerMetrics(self.predict_round)
+            list_df_players.append(
+                pm.fill_data_frame_with_round_players_info(round_games, round_info, curr_round)
+            )
+
+        df_players_rates = PlayerMetrics.calculate_player_rate_metrics(list_df_players)
+
+        print("Fetching current mercado snapshot for status_id / preco_num")
+        mercado = self.get_market_info_from_api()
+        mercado_rows = []
+        for a in mercado.get("atletas", []):
+            mercado_rows.append({
+                "atleta_id": a.get("atleta_id"),
+                "status_id_mkt": a.get("status_id"),
+                "preco_num_mkt": a.get("preco_num"),
+            })
+        if mercado_rows:
+            df_mkt = pd.DataFrame(mercado_rows).set_index("atleta_id")
+            df_players_rates = df_players_rates.join(df_mkt, how="left")
+            # Prefer fresh mercado values where available
+            df_players_rates["status_id"] = df_players_rates["status_id_mkt"].combine_first(
+                df_players_rates["status_id"]
+            )
+            df_players_rates["preco_num"] = df_players_rates["preco_num_mkt"].combine_first(
+                df_players_rates["preco_num"]
+            )
+            df_players_rates = df_players_rates.drop(columns=["status_id_mkt", "preco_num_mkt"])
+
+        if write_csv:
+            df_players_rates.to_csv("players_metrics.csv")
+
+        team_abr = {}
+        for i, (h, a) in enumerate(zip(self.teams_home, self.teams_away)):
+            team_abr[str(h)] = self.df_indicators.loc[i, "HOME"]
+            team_abr[str(a)] = self.df_indicators.loc[i, "AWAY"]
+
+        print("Calculating player indicators")
+        pi = PlayerIndicators(
+            df_players_rates,
+            self.df_indicators,
+            self.df_games_info,
+            self.teams_home,
+            self.teams_away,
+            team_abr,
+            self.predict_round,
+        )
+        self.df_players = pi.calculate_player_indicators()
+        if write_csv:
+            self.df_players.to_csv("players.csv")
 
 
+def run_pipeline(predict_round=None, window=8, write_csv=True):
+    cartola = Cartola(rodada_req=predict_round)
+    cartola.fill_games_info_with_last_rounds(window, write_csv=write_csv)
+    return cartola.df_indicators, cartola.df_players
 
+
+if __name__ == "__main__":
+    run_pipeline(window=8)

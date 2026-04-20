@@ -2,11 +2,20 @@ import math
 import pandas as pd
 import requests
 
+EXPECTED_SCOUTS = ["A", "FT", "FD", "FF", "FS", "PS", "DS", "CA"]
+
 class Indicators:
-    def __init__(self, df_games_info, teams_home, teams_away, rodada_req=None):
+    def __init__(self, df_games_info, teams_home, teams_away, rodada_req=None, baselines=None):
         self.predict_round = rodada_req
         self.df_games_info = df_games_info
+        self.baselines = baselines or {}
         self.df_indicators = self._create_dfs(teams_home, teams_away)
+
+    def _sos_factor(self, opp_value, baseline_key):
+        base = self.baselines.get(baseline_key, 0)
+        if not base:
+            return 1.0
+        return max(0.7, min(1.3, opp_value / base))
 
     def _create_dfs(self, teams_home, teams_away):
         columns_indicators = {
@@ -28,7 +37,13 @@ class Indicators:
             "expectedSavesA": [],
             "scoreProbA": [],
             "cleanSheetProbA": [],
+            "sosH": [],
+            "sosA": [],
         }
+
+        for sc in EXPECTED_SCOUTS:
+            columns_indicators[f"exp{sc}_H"] = []
+            columns_indicators[f"exp{sc}_A"] = []
 
         df_indicators = pd.DataFrame(0.0, columns=columns_indicators, index=range(0, 10, 1))
         df_indicators["HOME"] = pd.array(teams_home, dtype=object)
@@ -78,14 +93,26 @@ class Indicators:
             if home not in self.df_games_info.index or away not in self.df_games_info.index:
                 continue  # Skip if team IDs are not found
 
-            self.df_indicators.loc[index, "shotsMultiOTH"] = self.df_games_info.loc[home, "SHOTS OT PG H"] * self.df_games_info.loc[away, "SHOTS OT AGA A"]
-            self.df_indicators.loc[index, "shotsMultiOTA"] = self.df_games_info.loc[away, "SHOTS OT PG A"] * self.df_games_info.loc[home, "SHOTS OT AGA H"]
+            sos_goals_h = self._sos_factor(self.df_games_info.loc[away, "MGA A"], "MGA_A")
+            sos_goals_a = self._sos_factor(self.df_games_info.loc[home, "MGA H"], "MGA_H")
+            sos_shots_h = self._sos_factor(self.df_games_info.loc[away, "SHOTS OT AGA A"], "SHOTS_OT_AGA_A")
+            sos_shots_a = self._sos_factor(self.df_games_info.loc[home, "SHOTS OT AGA H"], "SHOTS_OT_AGA_H")
+
+            raw_shots_multi_ot_h = self.df_games_info.loc[home, "SHOTS OT PG H"] * self.df_games_info.loc[away, "SHOTS OT AGA A"]
+            raw_shots_multi_ot_a = self.df_games_info.loc[away, "SHOTS OT PG A"] * self.df_games_info.loc[home, "SHOTS OT AGA H"]
+            self.df_indicators.loc[index, "shotsMultiOTH"] = raw_shots_multi_ot_h * sos_shots_h
+            self.df_indicators.loc[index, "shotsMultiOTA"] = raw_shots_multi_ot_a * sos_shots_a
 
             self.df_indicators.loc[index, "shotsMultiTotH"] = self.df_games_info.loc[home, "TOTAL SHOTS H"] * self.df_games_info.loc[away, "TOTAL SHOTS AGA A"] / 10
             self.df_indicators.loc[index, "shotsMultiTotA"] = self.df_games_info.loc[away, "TOTAL SHOTS A"] * self.df_games_info.loc[home, "TOTAL SHOTS AGA H"] / 10
 
-            self.df_indicators.loc[index, "goalsMultiH"] = (self.df_games_info.loc[home, "MGF H"] + self.df_games_info.loc[away, "MGA A"]) / 2
-            self.df_indicators.loc[index, "goalsMultiA"] = (self.df_games_info.loc[away, "MGF A"] + self.df_games_info.loc[home, "MGA H"]) / 2
+            raw_goals_multi_h = (self.df_games_info.loc[home, "MGF H"] + self.df_games_info.loc[away, "MGA A"]) / 2
+            raw_goals_multi_a = (self.df_games_info.loc[away, "MGF A"] + self.df_games_info.loc[home, "MGA H"]) / 2
+            self.df_indicators.loc[index, "goalsMultiH"] = raw_goals_multi_h * sos_goals_h
+            self.df_indicators.loc[index, "goalsMultiA"] = raw_goals_multi_a * sos_goals_a
+
+            self.df_indicators.loc[index, "sosH"] = sos_goals_h
+            self.df_indicators.loc[index, "sosA"] = sos_goals_a
 
             conv_home_att = self.safe_divide(1, self.df_games_info.loc[home, "FIN P GOL F H"])
             conv_away_def = self.safe_divide(1, self.df_games_info.loc[away, "FIN P GOL T A"])
@@ -114,6 +141,16 @@ class Indicators:
             self.df_indicators.loc[index, "scoreProbA"] = p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbH"] = 1 - p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbA"] = 1 - p_home_scores
+
+            for sc in EXPECTED_SCOUTS:
+                sos_exp_h = self._sos_factor(self.df_games_info.loc[away, f"{sc} AGA A"], f"{sc}_AGA_A")
+                sos_exp_a = self._sos_factor(self.df_games_info.loc[home, f"{sc} AGA H"], f"{sc}_AGA_H")
+                self.df_indicators.loc[index, f"exp{sc}_H"] = (
+                    self.df_games_info.loc[home, f"{sc} H"] + self.df_games_info.loc[away, f"{sc} AGA A"]
+                ) / 2 * sos_exp_h
+                self.df_indicators.loc[index, f"exp{sc}_A"] = (
+                    self.df_games_info.loc[away, f"{sc} A"] + self.df_games_info.loc[home, f"{sc} AGA H"]
+                ) / 2 * sos_exp_a
 
             self.df_indicators.loc[index, "HOME"] = team_abr[str(home)]
             self.df_indicators.loc[index, "AWAY"] = team_abr[str(away)]
