@@ -393,11 +393,25 @@ played (`entrou_em_campo == True`). Run:
 
 Output:
 - `backtest_detail.csv` — per-player per-round predictions vs actuals.
-- `backtest_summary.csv` — RMSE, MAE, Spearman rank-correlation sliced
-  by overall, position, price bucket (quartile), and round.
+- `backtest_summary.csv` — RMSE and MAE sliced by overall, position,
+  is_home, and round.
 
-Use Spearman for ranking use cases (captain, pick order) and RMSE for
-scoring accuracy (squad expected-value estimates).
+**Metrics:** RMSE and MAE are the primary evaluation metrics. The
+downstream ILP optimizer sums `expCartolaTotal` directly under a budget
+constraint — it needs calibrated absolute values, not just correct
+ordering. Rank-correlation (Spearman) is not reported: each player's
+score is an independent regression target facing a different opponent,
+so cross-player rank errors carry no meaningful signal for model
+improvement.
+
+**Slices:**
+- `overall` — aggregate baseline across all players and rounds.
+- `position` — exposes per-role bias (e.g. GK vs ATK scale difference).
+- `is_home` — tests whether the home/away SoS split is well-calibrated;
+  systematic error here signals a feature gap for any ML model that
+  takes `is_home` as an input.
+- `round` — tracks error drift across the season; rising MAE late in
+  the season may indicate price/form staleness.
 
 ---
 

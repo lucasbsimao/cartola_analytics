@@ -50,20 +50,11 @@ def compute_errors(df, group_col=None):
         n = len(group)
         rmse = (err ** 2).mean() ** 0.5
         mae = err.abs().mean()
-        spearman = group[["expCartolaTotal", "actual_pontuacao"]].corr(
-            method="spearman"
-        ).iloc[0, 1]
-        return pd.Series({"n": n, "rmse": rmse, "mae": mae, "spearman": spearman})
+        return pd.Series({"n": n, "rmse": rmse, "mae": mae})
 
     if group_col is None:
         return _metrics(played).to_frame().T
     return played.groupby(group_col).apply(_metrics).reset_index()
-
-
-def bucket_price(df, n=4):
-    df = df.copy()
-    df["price_bucket"] = pd.qcut(df["preco"], q=n, labels=False, duplicates="drop")
-    return df
 
 
 def run_and_report(start_round, end_round, window=8, out_prefix="backtest"):
@@ -71,7 +62,6 @@ def run_and_report(start_round, end_round, window=8, out_prefix="backtest"):
     if df.empty:
         print("[backtest] empty result set — aborting report")
         return
-    df = bucket_price(df)
     df.to_csv(f"{out_prefix}_detail.csv")
 
     def _tag(frame, slice_name, key_col):
@@ -87,11 +77,11 @@ def run_and_report(start_round, end_round, window=8, out_prefix="backtest"):
     summary = pd.concat(
         [_tag(compute_errors(df), "overall", None),
          _tag(compute_errors(df, "position"), "position", "position"),
-         _tag(compute_errors(df, "price_bucket"), "price_bucket", "price_bucket"),
+         _tag(compute_errors(df, "is_home"), "is_home", "is_home"),
          _tag(compute_errors(df, "predict_round"), "round", "predict_round")],
         ignore_index=True,
     )
-    summary = summary[["slice", "group_value", "n", "rmse", "mae", "spearman"]]
+    summary = summary[["slice", "group_value", "n", "rmse", "mae"]]
     summary.to_csv(f"{out_prefix}_summary.csv", index=False)
     print(summary.to_string(index=False))
     return summary
