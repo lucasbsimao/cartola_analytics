@@ -11,6 +11,26 @@ class Indicators:
         self.baselines = baselines or {}
         self.df_indicators = self._create_dfs(teams_home, teams_away)
 
+    def _team_totals(self, team_id):
+        """Aggregate stats across all games (home + away) for a given team.
+
+        Returns per-game averages computed over the full set of matches the team played,
+        not split by venue. SHOTS OT PG / SHOTS OT AGA values are weighted by matches per
+        side since the underlying H/A columns are already per-match means.
+        """
+        row = self.df_games_info.loc[team_id]
+        matches_h = row["MATCHES H"]
+        matches_a = row["MATCHES A"]
+        total_matches = matches_h + matches_a
+        if total_matches == 0:
+            return {"MGF": 0.0, "MGA": 0.0, "SHOTS_OT_PG": 0.0, "SHOTS_OT_AGA": 0.0}
+        return {
+            "MGF": (row["GF H"] + row["GF A"]) / total_matches,
+            "MGA": (row["GA H"] + row["GA A"]) / total_matches,
+            "SHOTS_OT_PG": (row["SHOTS OT PG H"] * matches_h + row["SHOTS OT PG A"] * matches_a) / total_matches,
+            "SHOTS_OT_AGA": (row["SHOTS OT AGA H"] * matches_h + row["SHOTS OT AGA A"] * matches_a) / total_matches,
+        }
+
     def _sos_factor(self, opp_value, baseline_key):
         base = self.baselines.get(baseline_key, 0)
         if not base:
@@ -130,13 +150,16 @@ class Indicators:
             conv_home_def_tot = self.safe_divide(1, self.df_games_info.loc[home, "FIN POR GOL TOM"])
             self.df_indicators.loc[index, "totalShotConvRateA"] = (conv_away_att_tot + conv_home_def_tot) / 2
 
-            save_rate_h = 1 - self.safe_divide(self.df_games_info.loc[home, "MGA H"], self.df_games_info.loc[home, "SHOTS OT AGA H"])
-            save_rate_a = 1 - self.safe_divide(self.df_games_info.loc[away, "MGA A"], self.df_games_info.loc[away, "SHOTS OT AGA A"])
-            self.df_indicators.loc[index, "expectedSavesH"] = save_rate_h * self.df_games_info.loc[away, "SHOTS OT PG A"]
-            self.df_indicators.loc[index, "expectedSavesA"] = save_rate_a * self.df_games_info.loc[home, "SHOTS OT PG H"]
+            home_totals = self._team_totals(home)
+            away_totals = self._team_totals(away)
 
-            p_home_scores = 1 - math.exp(-self.df_games_info.loc[home, "MGF H"])
-            p_away_scores = 1 - math.exp(-self.df_games_info.loc[away, "MGF A"])
+            save_rate_h = 1 - self.safe_divide(home_totals["MGA"], home_totals["SHOTS_OT_AGA"])
+            save_rate_a = 1 - self.safe_divide(away_totals["MGA"], away_totals["SHOTS_OT_AGA"])
+            self.df_indicators.loc[index, "expectedSavesH"] = save_rate_h * away_totals["SHOTS_OT_PG"]
+            self.df_indicators.loc[index, "expectedSavesA"] = save_rate_a * home_totals["SHOTS_OT_PG"]
+
+            p_home_scores = 1 - math.exp(-home_totals["MGF"])
+            p_away_scores = 1 - math.exp(-away_totals["MGF"])
             self.df_indicators.loc[index, "scoreProbH"] = p_home_scores
             self.df_indicators.loc[index, "scoreProbA"] = p_away_scores
             self.df_indicators.loc[index, "cleanSheetProbH"] = 1 - p_away_scores

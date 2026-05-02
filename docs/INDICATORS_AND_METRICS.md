@@ -181,17 +181,19 @@ Full set: `expA_H/A`, `expFT_H/A`, `expFD_H/A`, `expFF_H/A`, `expFS_H/A`, `expPS
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `expectedSavesH` | `save_rate_H × SHOTS OT PG A(away)` where `save_rate_H = 1 − (MGA H / SHOTS OT AGA H)` | Projects how many saves the home goalkeeper is expected to make. Directly maps to `DE` scout points (+1.3 each) and `DP` (+7.0). |
-| `expectedSavesA` | `save_rate_A × SHOTS OT PG H(home)` where `save_rate_A = 1 − (MGA A / SHOTS OT AGA A)` | Same for the away keeper. |
+| `expectedSavesH` | `save_rate_H_total × SHOTS_OT_PG_total(away)` where `save_rate_H_total = 1 − (MGA_total / SHOTS_OT_AGA_total)` for the home team | Projects how many saves the home goalkeeper is expected to make. Uses each team's full-season averages (home + away games combined) instead of venue-split values. Directly maps to `DE` scout points (+1.3 each) and `DP` (+7.0). |
+| `expectedSavesA` | `save_rate_A_total × SHOTS_OT_PG_total(home)` where `save_rate_A_total = 1 − (MGA_total / SHOTS_OT_AGA_total)` for the away team | Same for the away keeper, using full-season totals for both teams. |
 
 ### Score Probability (Poisson-based)
 
 | Column | Formula | Rationale |
 |--------|---------|-----------|
-| `scoreProbH` | `1 − exp(−MGF H(home))` | Probability home team scores at least one goal, using Poisson with λ = MGF H. |
-| `scoreProbA` | `1 − exp(−MGF A(away))` | Same for away. |
+| `scoreProbH` | `1 − exp(−MGF_total(home))` | Probability home team scores at least one goal, using Poisson with λ = the team's overall goals-for per game (home + away). |
+| `scoreProbA` | `1 − exp(−MGF_total(away))` | Same for away, using its overall goals-for per game. |
 | `cleanSheetProbH` | `1 − scoreProbA` | Probability home team keeps a clean sheet. Directly tied to `SG` scout (+5.0 for GK/DEF/LAT). |
 | `cleanSheetProbA` | `1 − scoreProbH` | Same for away. |
+
+> `*_total` values are computed in `Indicators._team_totals` as per-game averages over all matches the team has played (home + away), with `SHOTS OT PG` / `SHOTS OT AGA` weighted by matches per side.
 
 ---
 
